@@ -152,6 +152,121 @@ Study the examples in this order:
 4. Check that all `try` calls are inside a function that returns `sdk.ProgramResult`
 5. Run `zig build` to see the exact error with line numbers
 
+## Testing with litesvm
+
+All integration tests have been migrated from `surfpool` to `litesvm` for speed and reliability. When writing or modifying tests, follow these patterns.
+
+### Test File Location
+- litesvm tests: `tests_litesvm/{example}.litesvm.test.ts`
+- surfpool tests: `examples/{example}.test.ts` (legacy, kept as fallback)
+
+### Basic litesvm Test Structure
+
+```typescript
+import {
+  startLitesvm,
+  deployProgramToLitesvm,
+  sendTransaction,
+  getAccount,
+  setAccount,
+  airdrop,
+} from '../client/src/litesvm';
+import { Keypair, TransactionInstruction } from '@solana/web3.js';
+
+describe('litesvm my-example', () => {
+  let programId: ReturnType<typeof deployProgramToLitesvm>;
+  let payer: Keypair;
+  let svm: ReturnType<typeof startLitesvm>['svm'];
+
+  beforeAll(() => {
+    const ctx = startLitesvm();
+    svm = ctx.svm;
+    payer = ctx.payer;
+    programId = deployProgramToLitesvm(svm, { exampleName: 'my-example' });
+  });
+
+  it('should do something', async () => {
+    const ix = new TransactionInstruction({
+      keys: [
+        { pubkey: payer.publicKey, isSigner: true, isWritable: true },
+      ],
+      programId,
+      data: Buffer.from([0]),
+    });
+
+    const result = await sendTransaction(svm, payer, [ix]);
+    expect(result.constructor.name).toBe('TransactionMetadata');
+  });
+});
+```
+
+### Critical litesvm Rules
+
+#### Rule A: Always build the correct example before testing
+`build.zig` outputs per-example `.so` files to `zig-out/lib/{example_name}.so`. `deployProgramToLitesvm` automatically runs `zig build -Dexample={name}` for you, but if you ever test a manually compiled `.so`, make sure it matches the example.
+
+#### Rule B: Jest must run with `maxWorkers: 1`
+litesvm returns `BigInt` values in account data, which crash Jest's worker IPC serialization. This is already configured in `jest.config.js`.
+
+#### Rule C: Pre-create PDAs that start at 0 lamports
+Unlike surfpool, litesvm does **not** auto-create zero-lamport accounts referenced in transactions. If your instruction references a PDA that doesn't exist yet, pre-create it:
+
+```typescript
+setAccount(svm, pdaPubkey, {
+  data: new Uint8Array(0),
+  executable: false,
+  lamports: 0n,
+  owner: SystemProgram.programId,
+  space: 0n,
+});
+```
+
+#### Rule D: Closed accounts are deleted
+After a CPI closes an account (balance goes to 0), litesvm deletes the account. `getAccount(svm, pubkey)` returns `undefined`:
+
+```typescript
+const lamports = getAccount(svm, escrow)?.lamports ?? 0n;
+```
+
+#### Rule E: Failed transactions throw
+The `sendTransaction` adapter in `client/src/litesvm.ts` detects `FailedTransactionMetadata` and throws. Use `rejects.toThrow()` for failure cases:
+
+```typescript
+await expect(sendTransaction(svm, payer, [badIx])).rejects.toThrow();
+```
+
+#### Rule F: SPL Token tests need `withDefaultPrograms()`
+If your test uses SPL Token, load the token program first:
+
+```typescript
+const svm = new LiteSVM();
+svm.withDefaultPrograms(); // loads Token program
+```
+
+### Account Role Mapping (for manual kit instructions)
+
+If you construct `@solana/kit` instructions manually, the `role` field maps as:
+
+| `role` | `isSigner` | `isWritable` |
+|--------|------------|--------------|
+| 0 | false | false |
+| 1 | false | true |
+| 2 | true | false |
+| 3 | true | true |
+
+## Project File Map
+
+| Path | What it is |
+|------|------------|
+| `sdk/` | Core Zig SDK (entrypoint, types, guards, CPI, token) |
+| `examples/` | Educational sBPF programs |
+| `cli/` | `zignocchio-cli` scaffolding tool |
+| `client/` | `@zignocchio/client` npm package + litesvm adapter |
+| `tests_litesvm/` | litesvm-based integration tests |
+| `docs/` | PRD, architecture, technical spec (human-readable) |
+| `AGENTS.md` | **This file** — AI agent canonical reference |
+| `sdk/anti_patterns.md` | Security vulnerability checklist |
+
 ## Questions?
 
-Read the doc comments in `sdk/*.zig` files. They are the authoritative source of truth.
+Read the doc comments in `sdk/*.zig` files. They are the authoritative source of truth. For test patterns, copy the nearest `tests_litesvm/*.litesvm.test.ts`.
