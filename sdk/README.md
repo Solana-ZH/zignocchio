@@ -58,6 +58,51 @@ Single-byte bit-packed borrow state tracking:
 - `logPubkey()` - Log public keys
 - `logComputeUnits()` - Log remaining compute units
 
+### Security Guards
+- `assert_signer()` - Enforce transaction signature
+- `assert_writable()` - Enforce mutability
+- `assert_immutable()` - Enforce immutability (inverse of writable)
+- `assert_owner()` - Verify program ownership
+- `assert_pda()` - Verify PDA derivation
+- `assert_discriminator()` - Prevent type confusion
+- `assert_initialized()` - Ensure account data is not all zeros
+- `assert_uninitialized()` - Ensure account data is all zeros
+- `assert_min_data_len()` - Ensure account data is large enough
+- `assert_rent_exempt()` - Ensure rent exemption
+- `assert_program_id()` - Verify a program ID matches expectation
+- `assert_executable()` - Verify an account is executable
+- `assert_keys_not_equal()` - Ensure two accounts are distinct
+
+### Account Schema
+`AccountSchema(T)` provides compile-time layout verification:
+- `LEN` - Compile-time struct size
+- `DISCRIMINATOR` - Type marker constant
+- `validate()` - Runtime length + discriminator check
+- `from_bytes()` - Safe mutable borrow wrapper
+- `from_bytes_unchecked()` - Fast cast after validation
+
+### System Program CPI
+- `system.getSystemProgramId()` - Safe System Program ID copy
+- `system.createAccount()` - Create new accounts via CPI
+- `system.createAccountSigned()` - Create new accounts with PDA signing
+- `system.transfer()` - Transfer lamports via CPI
+
+### Token Program CPI
+- `token.getTokenProgramId()` - Safe SPL Token Program ID copy
+- `token.transfer.transfer()` - Transfer tokens between token accounts
+- `token.transfer.transferSigned()` - Transfer tokens with PDA signing
+- `token.close_account.closeAccount()` - Close a token account
+- `token.close_account.closeAccountSigned()` - Close a token account with PDA signing
+- `token.ata.createAssociatedTokenAccount()` - Create an Associated Token Account
+- `token.ata.createAssociatedTokenAccountIdempotent()` - Create an ATA idempotently
+- `token.ata.closeAssociatedTokenAccount()` - Close an Associated Token Account
+
+### Idioms
+- `close_account()` - Drain lamports and clear discriminator
+- `read_u64_le()` - Read little-endian u64 from data
+- `write_u64_le()` - Write little-endian u64 to data
+- `read_pubkey()` - Read 32-byte pubkey from data
+
 ## Quick Start
 
 ### Basic Program
@@ -117,7 +162,9 @@ fn processInstruction(
         &accounts[0].key().*,
     };
 
-    const pda, const bump = try sdk.findProgramAddress(seeds, program_id);
+    var pda: sdk.Pubkey = undefined;
+    var bump: u8 = undefined;
+    try sdk.findProgramAddress(seeds, program_id, &pda, &bump);
 
     sdk.logMsg("Found PDA:");
     sdk.logPubkey(&pda);
@@ -148,6 +195,185 @@ fn processInstruction(
 
     return .{};
 }
+```
+
+### Using Security Guards
+
+```zig
+fn processInstruction(
+    program_id: *const sdk.Pubkey,
+    accounts: []sdk.AccountInfo,
+    instruction_data: []const u8,
+) sdk.ProgramResult {
+    const user = accounts[0];
+    const vault = accounts[1];
+
+    try sdk.guard.assert_signer(user);
+    try sdk.guard.assert_writable(vault);
+    try sdk.guard.assert_owner(vault, program_id);
+
+    return .{};
+}
+```
+
+### Using the Extended Guard Set
+
+```zig
+fn initialize(
+    program_id: *const sdk.Pubkey,
+    accounts: []sdk.AccountInfo,
+) sdk.ProgramResult {
+    const payer = accounts[0];
+    const new_account = accounts[1];
+    const config = accounts[2];
+
+    try sdk.guard.assert_signer(payer);
+    try sdk.guard.assert_writable(new_account);
+    try sdk.guard.assert_immutable(config);
+    try sdk.guard.assert_uninitialized(try new_account.borrowDataUnchecked());
+    try sdk.guard.assert_min_data_len(new_account, @sizeOf(MyState));
+    try sdk.guard.assert_keys_not_equal(payer, new_account);
+
+    return .{};
+}
+```
+
+### Using AccountSchema
+
+```zig
+const Counter = extern struct {
+    pub const DISCRIMINATOR: u8 = 0x01;
+    discriminator: u8,
+    count: u64,
+};
+
+fn processInstruction(
+    program_id: *const sdk.Pubkey,
+    accounts: []sdk.AccountInfo,
+    instruction_data: []const u8,
+) sdk.ProgramResult {
+    const account = accounts[0];
+    try sdk.guard.assert_owner(account, program_id);
+
+    const Schema = sdk.schema.AccountSchema(Counter);
+    try Schema.validate(account);
+
+    var ref: sdk.RefMut([]u8) = undefined;
+    try Schema.from_bytes(account, &ref);
+    defer ref.release();
+
+    var counter = Schema.from_bytes_unchecked(ref.value);
+    counter.count += 1;
+
+    return .{};
+}
+```
+
+### Using System Program CPI
+
+```zig
+fn processInstruction(
+    program_id: *const sdk.Pubkey,
+    accounts: []sdk.AccountInfo,
+    instruction_data: []const u8,
+) sdk.ProgramResult {
+    const payer = accounts[0];
+    const new_account = accounts[1];
+
+    try sdk.guard.assert_signer(payer);
+    try sdk.guard.assert_writable(payer);
+    try sdk.guard.assert_writable(new_account);
+
+    try sdk.system.createAccount(
+        payer,
+        new_account,
+        program_id,
+        128,   // space
+        6960,  // rent exempt lamports
+    );
+
+    return .{};
+}
+```
+
+### Using Token Program CPI
+
+```zig
+fn processInstruction(
+    program_id: *const sdk.Pubkey,
+    accounts: []sdk.AccountInfo,
+    instruction_data: []const u8,
+) sdk.ProgramResult {
+    const from = accounts[0];
+    const to = accounts[1];
+    const authority = accounts[2];
+
+    try sdk.token.transfer.transfer(from, to, authority, 1000);
+
+    return .{};
+}
+```
+
+### Using Idioms
+
+```zig
+fn processInstruction(
+    program_id: *const sdk.Pubkey,
+    accounts: []sdk.AccountInfo,
+    instruction_data: []const u8,
+) sdk.ProgramResult {
+    const account = accounts[0];
+    const destination = accounts[1];
+
+    // Read a u64 from account data at offset 1
+    const value = try sdk.idioms.read_u64_le(
+        account.borrowDataUnchecked(),
+        1,
+    );
+
+    // Close the account, transferring lamports to destination
+    try sdk.idioms.close_account(account, destination);
+
+    return .{};
+}
+```
+
+## CLI Scaffolding
+
+Zignocchio includes a CLI tool for scaffolding new Solana programs.
+
+### Installation
+
+```bash
+cd cli
+zig build
+```
+
+The binary will be at `zig-out/bin/zignocchio-cli`.
+
+### Usage
+
+```bash
+# Create a new project in the current directory
+./zig-out/bin/zignocchio-cli new my-program
+
+# Create a new project in a specific directory
+./zig-out/bin/zignocchio-cli new my-program --path ./projects
+```
+
+This generates a complete project skeleton with:
+- `build.zig` — Pre-configured sBPF build pipeline
+- `src/lib.zig` — Sample counter program with guards, PDAs, and `createAccountSigned`
+- `tests/program.test.ts` — Surfpool integration test skeleton
+- `sdk/` — Copied Zignocchio SDK
+
+### Generated Project Build
+
+```bash
+cd my-program
+zig build        # Compile to sBPF
+zig build test   # Run unit tests
+npx jest tests/program.test.ts  # Run surfpool integration tests
 ```
 
 ## Known Issues (Zig 0.16 BPF Backend)
@@ -193,7 +419,24 @@ sdk/
 ├── log.zig           # Logging utilities
 ├── allocator.zig     # BumpAllocator
 ├── pda.zig           # PDA functions
-└── cpi.zig           # Cross-program invocation
+├── cpi.zig           # Cross-program invocation
+├── guard.zig         # Security guard helpers
+├── schema.zig        # AccountSchema comptime interface
+├── system.zig        # System Program CPI wrappers
+├── token/            # SPL Token Program CPI wrappers
+│   ├── mod.zig
+│   ├── ata.zig
+│   ├── transfer.zig
+│   ├── close_account.zig
+│   └── instructions/
+└── idioms.zig        # Common idioms and utilities
+
+cli/
+├── build.zig         # CLI build configuration
+└── src/
+    ├── main.zig      # CLI entrypoint
+    ├── commands.zig  # Command implementations
+    └── template.zig  # Project templates
 ```
 
 ### Memory Layout
@@ -272,6 +515,7 @@ See the main project README and `examples/README.md` for build instructions.
 See the `examples/` directory for complete working programs:
 - `hello.zig` - Minimal example
 - `counter.zig` - Full-featured example with account management
+- `escrow/` - PDAs, System Program CPI, and security guards in a real-world escrow flow
 
 ## Contributing
 

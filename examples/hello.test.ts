@@ -44,7 +44,7 @@ describe('Hello World Program', () => {
     );
 
     // Start test validator with program deployed
-    const programPath = path.join(__dirname, '..', 'zig-out', 'lib', 'program_name.so');
+    const programPath = path.join(__dirname, '..', 'zig-out', 'lib', 'hello.so');
 
     if (!fs.existsSync(programPath)) {
       throw new Error(`Program not found at ${programPath}. Run 'zig build' first.`);

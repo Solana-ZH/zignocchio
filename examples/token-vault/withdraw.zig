@@ -101,14 +101,6 @@ pub fn process(
         return error.InsufficientFunds;
     }
 
-    // Create Transfer instruction using SDK with PDA signing
-    const transfer_ix = sdk.token.instructions.Transfer{
-        .from = validated.vault_token_account,
-        .to = validated.user_token_account,
-        .authority = validated.vault_token_account, // PDA is the authority
-        .amount = amount,
-    };
-
     // Create signer seeds for PDA signing
     const seed_owner = validated.owner.key().*;
     const bump_array = [_]u8{validated.bump};
@@ -118,8 +110,14 @@ pub fn process(
         bump_array[0..],
     };
 
-    // Execute transfer with PDA signature
-    try transfer_ix.invokeSigned(signer_seeds);
+    // Execute transfer with PDA signature using the high-level wrapper
+    try sdk.token.transfer.transferSigned(
+        validated.vault_token_account,
+        validated.user_token_account,
+        validated.vault_token_account, // PDA is the authority
+        amount,
+        signer_seeds,
+    );
 
     sdk.logMsg("Withdraw: Transfer completed successfully");
 }

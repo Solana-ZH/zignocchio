@@ -6,8 +6,8 @@ const std = @import("std");
 pub fn build(b: *std.Build) !void {
     const optimize = .ReleaseSmall;
 
-    // Build option: which example to build (hello, counter, or vault)
-    const example_name = b.option([]const u8, "example", "Example to build (hello, counter, or vault)") orelse "counter";
+    // Build option: which example to build
+    const example_name = b.option([]const u8, "example", "Example to build (hello, counter, vault, transfer-sol, pda-storage, token-vault, escrow)") orelse "counter";
 
     // Step 1: Generate LLVM bitcode using zig build-lib
     const bitcode_path = "entrypoint.bc";
@@ -33,7 +33,8 @@ pub fn build(b: *std.Build) !void {
     const mkdir_step = b.addSystemCommand(&.{ "mkdir", "-p", "zig-out/lib" });
 
     // Step 2: Link with sbpf-linker
-    const program_so_path = "zig-out/lib/program_name.so";
+    // Each example gets its own .so to avoid stale artifact bugs in tests.
+    const program_so_path = b.fmt("zig-out/lib/{s}.so", .{example_name});
     const link_program = b.addSystemCommand(&.{
         "sbpf-linker",
         "--cpu", "v2",  // v2: No 32-bit jumps (Solana sBPF compatible)
@@ -68,6 +69,19 @@ pub fn build(b: *std.Build) !void {
 
     // Default install step depends on linking
     b.getInstallStep().dependOn(&link_program.step);
+
+    // CLI executable
+    const cli_module = b.createModule(.{
+        .root_source_file = b.path("cli/src/main.zig"),
+        .target = b.graph.host,
+        .optimize = .ReleaseFast,
+    });
+    cli_module.link_libc = true;
+    const cli_exe = b.addExecutable(.{
+        .name = "zignocchio-cli",
+        .root_module = cli_module,
+    });
+    b.installArtifact(cli_exe);
 
     // Optional unit tests (run on host, not BPF)
     const test_step = b.step("test", "Run unit tests");

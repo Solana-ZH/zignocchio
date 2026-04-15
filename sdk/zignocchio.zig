@@ -67,6 +67,10 @@ pub const allocator = @import("allocator.zig");
 pub const pda = @import("pda.zig");
 pub const cpi = @import("cpi.zig");
 pub const token = @import("token/mod.zig");
+pub const guard = @import("guard.zig");
+pub const schema = @import("schema.zig");
+pub const system = @import("system.zig");
+pub const idioms = @import("idioms.zig");
 
 // Re-export commonly used types
 pub const ProgramError = errors.ProgramError;

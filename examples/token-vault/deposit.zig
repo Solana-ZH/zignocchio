@@ -117,16 +117,13 @@ pub fn process(
     sdk.logMsg("Deposit amount:");
     sdk.logU64(data.amount);
 
-    // Create Transfer instruction using SDK
-    const transfer_ix = sdk.token.instructions.Transfer{
-        .from = validated.user_token_account,
-        .to = validated.vault_token_account,
-        .authority = validated.owner,
-        .amount = data.amount,
-    };
-
-    // Execute transfer
-    try transfer_ix.invoke();
+    // Execute transfer using the high-level wrapper
+    try sdk.token.transfer.transfer(
+        validated.user_token_account,
+        validated.vault_token_account,
+        validated.owner,
+        data.amount,
+    );
 
     sdk.logMsg("Deposit: Transfer completed successfully");
 }

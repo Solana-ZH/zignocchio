@@ -121,7 +121,7 @@ try sdk.invokeSigned(&instruction, &[_]sdk.AccountInfo{ vault, owner }, signer_s
 zig build -Dexample=vault
 ```
 
-Output: `zig-out/lib/program_name.so` (approx 8.5 KB)
+Output: `zig-out/lib/vault.so` (approx 8.5 KB)
 
 ## Testing
 

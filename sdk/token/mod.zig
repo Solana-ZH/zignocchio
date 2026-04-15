@@ -10,6 +10,11 @@ pub const mint = @import("mint.zig");
 pub const account = @import("account.zig");
 pub const instructions = @import("instructions/mod.zig");
 
+// Re-export CPI wrappers
+pub const ata = @import("ata.zig");
+pub const transfer = @import("transfer.zig");
+pub const close_account = @import("close_account.zig");
+
 // Re-export commonly used types
 pub const Mint = mint.Mint;
 pub const TokenAccount = account.TokenAccount;

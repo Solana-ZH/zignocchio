@@ -14,6 +14,20 @@ npx jest examples/hello.test.ts
 
 Expected output: `✓ 2 tests passed` with "Hello from Zignocchio!" in the logs.
 
+### Starting a New Project
+
+You can also use the CLI to scaffold a new program instead of copying an example:
+
+```bash
+cd cli
+zig build
+./zig-out/bin/zignocchio-cli new my-program
+cd my-program
+zig build
+```
+
+This generates a complete project with `build.zig`, `src/lib.zig`, and `tests/program.test.ts`.
+
 ---
 
 ## Programs
@@ -43,6 +57,46 @@ A counter program that stores and increments a u64 value.
 - `2` - Reset counter to 0
 - No data - Default increment
 
+### transfer-sol.zig
+The simplest program that performs a Cross-Program Invocation (CPI). Transfers lamports from a signer to a recipient via the System Program.
+
+**Features demonstrated:**
+- Signer validation with `guard.assert_signer`
+- Writable account checks with `guard.assert_writable`
+- System Program CPI using `sdk.system.transfer`
+- Instruction data parsing (u64 amount)
+- Rejecting zero-amount transfers
+
+**Accounts:**
+- `0` - `[signer, writable]` from — source of lamports
+- `1` - `[writable]` to — destination for lamports
+- `2` - `[]` system_program — System Program ID
+
+### pda-storage.zig
+A PDA-based key-value store. Creates a Program Derived Address owned by the program, then reads and writes a u64 value to it.
+
+**Features demonstrated:**
+- PDA derivation with `sdk.findProgramAddress`
+- PDA validation in instructions
+- System Program CPI to create a PDA (`sdk.system.createAccountSigned`)
+- Discriminator-based instruction routing (init vs update)
+- Storing and verifying an owner pubkey in account data
+- Rejecting unauthorized updates
+
+**Instructions:**
+- `0` - Init: creates the storage PDA and sets an initial u64 value
+- `1` - Update: updates the stored u64 value (only the original owner)
+
+**Accounts (Init):**
+- `0` - `[signer, writable]` payer — pays for PDA creation
+- `1` - `[writable]` storage_pda — derived from `["storage", user_pubkey]`
+- `2` - `[signer]` user — the owner of this storage
+- `3` - `[]` system_program
+
+**Accounts (Update):**
+- `0` - `[writable]` storage_pda
+- `1` - `[signer]` user — must match the owner stored in the PDA
+
 ## Building
 
 Build the **counter** example (default):
@@ -57,7 +111,17 @@ Build the **hello** example:
 zig build -Dexample=hello
 ```
 
-The compiled program will be at: `zig-out/lib/program_name.so`
+Build the **transfer-sol** example:
+```bash
+zig build -Dexample=transfer-sol
+```
+
+Build the **pda-storage** example:
+```bash
+zig build -Dexample=pda-storage
+```
+
+The compiled program will be at: `zig-out/lib/{example_name}.so` (e.g., `zig-out/lib/hello.so`)
 
 ### Build Requirements
 
@@ -85,6 +149,8 @@ Each example has its own test file that automatically builds the correct program
 
 - `hello.test.ts` - Tests for the hello world program
 - `counter.test.ts` - Tests for the counter program
+- `transfer-sol.test.ts` - Tests for the transfer-sol program
+- `pda-storage.test.ts` - Tests for the pda-storage program
 
 ### Prerequisites
 
@@ -112,6 +178,12 @@ npx jest examples/hello.test.ts
 
 # Counter test only
 npx jest examples/counter.test.ts
+
+# Transfer SOL test only
+npx jest examples/transfer-sol.test.ts
+
+# PDA Storage test only
+npx jest examples/pda-storage.test.ts
 ```
 
 ### What the tests do
@@ -139,6 +211,17 @@ Each test:
 - ✓ Proper logging of counter values
 - ✓ Error handling for invalid operations
 - ✓ Overflow/underflow protection
+
+**transfer-sol.test.ts covers:**
+- ✓ Transfers lamports from signer to recipient via System Program CPI
+- ✓ Rejects non-signer transfers
+- ✓ Rejects zero-amount transfers
+
+**pda-storage.test.ts covers:**
+- ✓ Initializes a storage PDA with an initial u64 value
+- ✓ Updates the stored value (authorized owner only)
+- ✓ Rejects updates from unauthorized users
+- ✓ Rejects init with an invalid PDA
 
 ### Test Output Example
 
@@ -175,6 +258,11 @@ cargo build
 
 1. **hello.zig** - Start here to understand the basic structure
 2. **counter.zig** - Learn about account management and data manipulation
+3. **transfer-sol.zig** - Your first Cross-Program Invocation (CPI) with the System Program
+4. **pda-storage.zig** - PDA creation, validation, and simple on-chain storage
+5. **vault.zig** - PDA-based vault with deposits and withdrawals
+6. **token-vault.zig** - Token Program CPI (ATA, transfer, close account)
+7. **escrow.zig** - Advanced example combining PDAs, Token CPI, and security guards
 
 ## Key Concepts
 
