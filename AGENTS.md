@@ -4,11 +4,24 @@
 > **Zig version**: 0.16.0  
 > **Solana target**: sBPF v2
 
-## Before You Start
+## 0. MANDATORY Onboarding (Read This First)
 
-Your training data likely **does not contain** Zignocchio or Zig BPF development. Do not rely on memory or web search for Solana + Zig specifics—**this SDK's source code is the canonical reference**.
+**You are operating in a non-standard stack.** Your training data almost certainly does NOT contain Zignocchio or Zig BPF development. Do not use memory, web search, or hallucination for Solana + Zig specifics. **This file and the source code in this repo are the ONLY authoritative sources.**
 
-Always start with:
+### Read in this exact order before writing any code:
+
+1. **This file** (`AGENTS.md`) — rules, patterns, and task recipes
+2. **`sdk/anti_patterns.md`** — vulnerability checklist and common mistakes
+3. **The example most similar to your task** — see [Learning Path](#learning-path)
+4. **The relevant `sdk/*.zig` source files** — doc comments are canonical API docs
+
+### If you skip this, you WILL produce code that:
+- Crashes at runtime with `Access violation in unknown section`
+- Fails security audits (missing signer checks, PDA validation)
+- Mismatches client/server account layouts
+- Uses illegal BPF instructions that fail to compile or link
+
+Always start your Zig files with:
 ```zig
 const sdk = @import("sdk/zignocchio.zig");
 ```
@@ -152,6 +165,127 @@ Study the examples in this order:
 4. Check that all `try` calls are inside a function that returns `sdk.ProgramResult`
 5. Run `zig build` to see the exact error with line numbers
 
+## Task Recipes
+
+### Recipe A: Add a new example program
+
+1. **Pick the closest existing example** from the [Learning Path](#learning-path)
+2. **Copy its directory** to `examples/{new-name}/`
+3. **Write `examples/{new-name}/lib.zig`** with entrypoint routing to instruction handlers
+4. **Create `tests_litesvm/{new-name}.litesvm.test.ts`** using the adapter layer
+5. **Run the specific test:** `npx jest tests_litesvm/{new-name}.litesvm.test.ts --config jest.config.js`
+6. **Run the full litesvm suite before finishing:** `npx jest tests_litesvm --config jest.config.js`
+
+### Recipe B: Add a new SDK module
+
+1. **Create `sdk/{module}.zig`**
+2. **Add doc comments to EVERY public function** — these are the API docs
+3. **Add inline unit tests** at the bottom using `test "..." { ... }`
+4. **Export from `sdk/zignocchio.zig`**
+5. **Run `zig build test`** to verify compilation and tests
+6. **Update `sdk/README.md`** with a brief description
+
+### Recipe C: Write a litesvm integration test
+
+1. **Import the adapter:** `import { startLitesvm, deployProgramToLitesvm, sendTransaction, getAccount, setAccount, airdrop } from '../client/src/litesvm';`
+2. **Start a fresh context:** `const ctx = startLitesvm(); const svm = ctx.svm; const payer = ctx.payer;`
+3. **For SPL Token tests:** use `ctx.svm.withDefaultPrograms()`
+4. **Deploy:** `const programId = deployProgramToLitesvm(svm, { exampleName: 'your-example' });`
+5. **Fund accounts:** `airdrop(svm, user.publicKey, 1_000_000_000n);`
+6. **Pre-create 0-lamport PDAs** with `setAccount(svm, pda, { data: new Uint8Array(0), executable: false, lamports: 0n, owner: SystemProgram.programId, space: 0n });`
+7. **Assert success:** `expect(result.constructor.name).toBe('TransactionMetadata')`
+8. **Assert failures:** `await expect(...).rejects.toThrow()`
+
+---
+
+## Decision Trees
+
+### Which example should I copy?
+
+| Your program needs... | Copy this example |
+|-----------------------|-------------------|
+| Just logs / basic entrypoint | `examples/hello/` |
+| Read/write custom account data | `examples/counter/` |
+| Transfer SOL via System Program | `examples/transfer-sol/` |
+| PDA + SOL storage | `examples/vault/` |
+| PDA + arbitrary data storage per user | `examples/pda-storage/` |
+| SPL Token transfers | `examples/token-vault/` |
+| Multi-instruction flow with security | `examples/escrow/` |
+
+### Which CPI helper should I use?
+
+| Operation | Helper |
+|-----------|--------|
+| Transfer lamports | `sdk.system.transfer(from, to, amount)` |
+| Create account | `sdk.system.createAccount(payer, new_account, owner, space, lamports)` |
+| Create account with PDA signer | `sdk.system.createAccountSigned(..., signer_seeds)` |
+| Token transfer | `sdk.token.transfer.transfer(from, to, authority, amount)` |
+| Token transfer with PDA signer | `sdk.token.transfer.transferSigned(...)` |
+| Close token account | `sdk.token.close_account.closeAccount(...)` |
+| Create ATA | `sdk.token.ata.createAssociatedTokenAccount(...)` |
+| Close/drain any account | `sdk.idioms.close_account(account, destination)` |
+
+---
+
+## Debug Playbook
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Access violation in unknown section` | Address of module-scope constant passed to syscall/CPI | Copy to local `var` on stack first |
+| `Illegal instruction` / `Illegal BPF instruction` | Aggregate returns or `.{}` struct init | Use explicit fields or output parameters |
+| `unable to load 'lib.zig': FileNotFound` | Running `zig build` from wrong directory | Run from repo root |
+| `Do not know how to serialize a BigInt` | Jest multi-worker + litesvm bigint | `maxWorkers: 1` (already set) |
+| Program not found / wrong behavior in litesvm | Stale `.so` from different example | `build.zig` now uses per-example names; rebuild with `-Dexample=` |
+| `MissingRequiredSignature` in litesvm | Signer not registered on transaction | Adapter handles this; check `sendTransaction` params |
+| `IncorrectProgramId` on token account | Compared owner to module-scope constant | Use `sdk.token.getTokenProgramId(&local_var)` |
+| Test expects `FailedTransactionMetadata` | Adapter now throws on failure | Use `await expect(...).rejects.toThrow()` |
+
+---
+
+## Pre-Submit Checklist
+
+Before declaring any task complete, run these commands in order:
+
+```bash
+# 1. Zig compilation for the example you changed
+zig build -Dexample=<name>
+
+# 2. Zig unit tests for any SDK module you changed
+zig build test
+
+# 3. TypeScript compilation for the client package
+cd client && npx tsc --noEmit && cd ..
+
+# 4. The specific litesvm test(s) you added or modified
+npx jest tests_litesvm/<name>.litesvm.test.ts --config jest.config.js
+
+# 5. FULL litesvm test suite (mandatory)
+npx jest tests_litesvm --config jest.config.js
+```
+
+**If any of these fail, the task is NOT complete.**
+
+---
+
+## Naming and Structure Conventions
+
+### Zig files
+- Entrypoint: `lib.zig`
+- Instruction handlers: `{instruction_name}.zig`
+- Discriminators: `pub const DISCRIMINATOR: u8 = N;`
+- Account validation structs: `{Instruction}Accounts`
+- Data parsing structs: `{Instruction}Data`
+
+### TypeScript tests
+- litesvm tests: `tests_litesvm/{example_name}.litesvm.test.ts`
+- Do NOT put litesvm tests in `examples/`
+
+### Commits
+- Use conventional commits: `feat:`, `fix:`, `test:`, `docs:`, `refactor:`
+- Include scope: `feat(sdk): add assert_executable guard`
+
+---
+
 ## Testing with litesvm
 
 All integration tests have been migrated from `surfpool` to `litesvm` for speed and reliability. When writing or modifying tests, follow these patterns.
@@ -256,16 +390,36 @@ If you construct `@solana/kit` instructions manually, the `role` field maps as:
 
 ## Project File Map
 
-| Path | What it is |
-|------|------------|
-| `sdk/` | Core Zig SDK (entrypoint, types, guards, CPI, token) |
-| `examples/` | Educational sBPF programs |
-| `cli/` | `zignocchio-cli` scaffolding tool |
-| `client/` | `@zignocchio/client` npm package + litesvm adapter |
-| `tests_litesvm/` | litesvm-based integration tests |
-| `docs/` | PRD, architecture, technical spec (human-readable) |
-| `AGENTS.md` | **This file** — AI agent canonical reference |
-| `sdk/anti_patterns.md` | Security vulnerability checklist |
+| Path | What it is | When to read/edit |
+|------|------------|-------------------|
+| `sdk/zignocchio.zig` | Main SDK entrypoint | Read first to understand the public API |
+| `sdk/guard.zig` | Security assertion helpers | Read before writing instruction handlers; extend if adding new guards |
+| `sdk/schema.zig` | `AccountSchema` comptime interface | Read when you need typed account data |
+| `sdk/system.zig` | System Program CPI wrappers | Read when doing lamport transfers or account creation |
+| `sdk/token/` | SPL Token Program CPI wrappers | Read when doing anything with tokens |
+| `sdk/idioms.zig` | Common patterns | Read before inventing your own helper |
+| `sdk/anti_patterns.md` | Vulnerability checklist | **Read before EVERY instruction handler** |
+| `examples/hello/lib.zig` | Minimal entrypoint | Starting point for simple programs |
+| `examples/counter/lib.zig` | Account data access | Starting point for stateful programs |
+| `examples/transfer-sol/` | System Program CPI | Starting point for SOL transfers |
+| `examples/vault/` | PDA + System CPI | Starting point for PDA-based programs |
+| `examples/pda-storage/` | PDA validation + storage | Starting point for user-scoped PDAs |
+| `examples/token-vault/` | SPL Token CPI + PDA signing | Starting point for token programs |
+| `examples/escrow/` | Multi-instruction flow | Most complex reference example |
+| `client/src/litesvm.ts` | litesvm test adapter | Read when writing litesvm tests |
+| `tests_litesvm/` | litesvm integration tests | Add new tests here |
+| `build.zig` | Per-example build outputs | Modify if build artifacts change |
+| `docs/` | PRD, architecture, specs | Read for context, not API details |
+
+## When to Ask for Help
+
+Stop and ask the human before proceeding if you encounter:
+- A new syscall needs to be added to `sdk/syscalls.zig`
+- The `build.zig` build logic needs structural changes
+- You need to add a new external dependency (we are **zero-dependency**)
+- A test passes in isolation but fails in the full suite
+- You are unsure whether a security pattern is correct
+- You need to change the litesvm adapter (`client/src/litesvm.ts`) fundamentally
 
 ## Questions?
 
