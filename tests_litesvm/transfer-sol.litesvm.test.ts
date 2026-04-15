@@ -1,3 +1,10 @@
+/**
+ * Transfer-SOL program litesvm integration test.
+ *
+ * Tests System Program CPI for lamport transfers, including success cases
+ * and security rejections (non-signer, zero amount).
+ */
+
 import {
   startLitesvm,
   deployProgramToLitesvm,

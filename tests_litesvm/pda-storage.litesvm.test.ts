@@ -1,3 +1,10 @@
+/**
+ * PDA-Storage program litesvm integration test.
+ *
+ * Tests PDA derivation, initialization via System Program CPI, and
+ * authorized updates to a user-owned storage account.
+ */
+
 import {
   startLitesvm,
   deployProgramToLitesvm,

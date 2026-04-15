@@ -1,3 +1,11 @@
+/**
+ * Escrow program litesvm integration test.
+ *
+ * Tests a multi-instruction escrow flow: make (create escrow + deposit),
+ * accept (taker receives funds, escrow closed), refund (maker gets funds back),
+ * plus security checks for unauthorized access.
+ */
+
 import {
   startLitesvm,
   deployProgramToLitesvm,

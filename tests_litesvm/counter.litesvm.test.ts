@@ -1,3 +1,10 @@
+/**
+ * Counter program litesvm integration test.
+ *
+ * Tests a stateful program that reads and writes a u64 counter value
+ * to a pre-initialized account.
+ */
+
 import {
   startLitesvm,
   deployProgramToLitesvm,

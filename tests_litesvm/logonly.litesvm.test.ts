@@ -1,3 +1,10 @@
+/**
+ * LogOnly program litesvm isolation test.
+ *
+ * Executes a program that only calls `sol_log_` to verify syscall
+ * compatibility in the litesvm environment.
+ */
+
 import { LiteSVM } from 'litesvm';
 import {
   appendTransactionMessageInstruction,

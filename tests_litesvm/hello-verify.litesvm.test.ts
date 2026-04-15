@@ -1,3 +1,10 @@
+/**
+ * Hello program litesvm verification test.
+ *
+ * Deploys the hello program using raw `@solana/kit` APIs and inspects
+ * the transaction result to catch any runtime errors during execution.
+ */
+
 import { LiteSVM } from 'litesvm';
 import {
   appendTransactionMessageInstruction,

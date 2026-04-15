@@ -1,3 +1,10 @@
+/**
+ * NOOP program litesvm isolation test.
+ *
+ * Executes a program with zero syscalls to isolate whether execution errors
+ * come from entrypoint parsing or syscall ABI mismatches.
+ */
+
 import { LiteSVM } from 'litesvm';
 import {
   appendTransactionMessageInstruction,

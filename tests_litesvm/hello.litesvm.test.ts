@@ -1,3 +1,9 @@
+/**
+ * Hello program litesvm integration test.
+ *
+ * Verifies the simplest Zignocchio program executes successfully in litesvm.
+ */
+
 import {
   startLitesvm,
   deployProgramToLitesvm,

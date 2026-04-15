@@ -1,3 +1,13 @@
+/**
+ * Token-Vault program litesvm integration test.
+ *
+ * Tests SPL Token interactions in litesvm: initialize a PDA token account,
+ * deposit tokens, withdraw tokens, and security checks. Because litesvm
+ * does not provide `createMint` / `createAccount` helpers, this test manually
+ * constructs mint (82 bytes) and token account (165 bytes) data using
+ * `@solana/buffer-layout` and injects them via `setAccount`.
+ */
+
 import {
   startLitesvm,
   deployProgramToLitesvm,

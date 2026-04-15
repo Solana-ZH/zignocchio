@@ -1,3 +1,10 @@
+/**
+ * Vault program litesvm integration test.
+ *
+ * Tests a lamport vault with PDA-based accounts: deposit SOL into a vault,
+ * withdraw all SOL back, and security checks for invalid signers / PDAs.
+ */
+
 import {
   startLitesvm,
   deployProgramToLitesvm,
