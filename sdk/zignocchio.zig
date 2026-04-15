@@ -9,6 +9,36 @@
 //! - Type-safe API
 //! - Minimal compute unit consumption
 //!
+//! ## Important: Zig 0.16 BPF Pitfalls
+//!
+//! Zig 0.16's BPF backend has a known quirk where **module-scope `const` arrays
+//! (especially all-zero arrays) can be placed at invalid low addresses** such as
+//! `0x0` or `0x20` in the generated ELF. Taking the address of such constants
+//! (`&MY_CONSTANT`) and passing it to syscalls or CPI will result in an
+//! `Access violation in unknown section` at runtime.
+//!
+//! ### Rule of thumb
+//! Whenever you need a fixed Program ID or other module-level constant and must
+//! pass a pointer to it, **copy the value to a local variable first**:
+//!
+//! ```zig
+//! // BAD - may crash at runtime on Zig 0.16
+//! // if (!sdk.pubkeyEq(account.owner(), &SYSTEM_PROGRAM_ID)) { ... }
+//!
+//! // GOOD - stack copy guarantees a valid address
+//! var system_program_id: sdk.Pubkey = .{
+//!     0, 0, 0, 0, 0, 0, 0, 0,
+//!     0, 0, 0, 0, 0, 0, 0, 0,
+//!     0, 0, 0, 0, 0, 0, 0, 0,
+//!     0, 0, 0, 0, 0, 0, 0, 0,
+//! };
+//! if (!sdk.pubkeyEq(account.owner(), &system_program_id)) { ... }
+//! ```
+//!
+//! The SDK's built-in helpers (e.g. `sdk.token.getTokenProgramId(&out)`) already
+//! follow this pattern. If you add new module-level constants, make sure to do
+//! the same.
+//!
 //! ## Example
 //! ```zig
 //! const sdk = @import("sdk/zignocchio.zig");

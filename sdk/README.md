@@ -150,6 +150,35 @@ fn processInstruction(
 }
 ```
 
+## Known Issues (Zig 0.16 BPF Backend)
+
+Zig 0.16's BPF backend has a quirk where **module-scope `const` arrays—especially all-zero arrays—can be placed at invalid low addresses** (e.g. `0x0` or `0x20`) in the generated ELF. If you take the address of such a constant and pass it to syscalls or CPI, the program will crash with:
+
+```
+Access violation in unknown section at address 0x0
+```
+
+### Safe Pattern
+
+Always copy the constant to a **local variable** before using its address:
+
+```zig
+// ❌ DANGEROUS - may crash at runtime
+// pub const SYSTEM_PROGRAM_ID: Pubkey = .{0, ...};
+// if (!sdk.pubkeyEq(owner, &SYSTEM_PROGRAM_ID)) { ... }
+
+// ✅ SAFE - stack copy guarantees a valid address
+var system_program_id: sdk.Pubkey = .{
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+};
+if (!sdk.pubkeyEq(owner, &system_program_id)) { ... }
+```
+
+The SDK already applies this workaround internally (e.g. `sdk.token.getTokenProgramId(&out)`). **If you define new module-level Program ID constants, apply the same rule.**
+
 ## Architecture
 
 ### Module Structure
