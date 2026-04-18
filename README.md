@@ -31,6 +31,9 @@ zig build -p ~/.local
 export PATH="$HOME/.local/bin:$PATH"
 cd ..
 
+# Or, if elf2sbpf is cloned next to this repo, use it in place:
+export PATH="$(cd ../elf2sbpf/zig-out/bin && pwd):$PATH"
+
 # Install Node.js for testing
 ```
 
@@ -45,6 +48,9 @@ zig build -Dexample=hello
 
 # Point to a non-PATH elf2sbpf binary
 zig build -Dexample=hello -Delf2sbpf-bin=/path/to/elf2sbpf
+
+# If elf2sbpf is checked out in the parent directory
+zig build -Dexample=hello -Delf2sbpf-bin=../elf2sbpf/zig-out/bin/elf2sbpf
 ```
 
 This generates:
