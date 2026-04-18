@@ -44,3 +44,6 @@ temp_example.zig
 # Rust test harness
 tests_rust/target/
 tests_rust/Cargo.lock
+
+# ai
+.pi
