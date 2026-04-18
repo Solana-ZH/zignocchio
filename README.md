@@ -1,10 +1,16 @@
 # Solana BPF Programs with Zig
 
-Build Solana programs in Zig using the standard BPF target and an
-**[elf2sbpf](https://github.com/DaviRain-Su/elf2sbpf)**-based build
-pipeline. The toolchain stays simple: Zig emits LLVM bitcode, `zig cc`
-produces a BPF ELF object with Solana's 4 KB stack limit, and
-`elf2sbpf` converts that object into the final Solana SBPF program.
+Build Solana programs in Zig using one of two back-ends:
+
+| Backend | Compiler | Pipeline | Zig version | CU / size |
+|---------|----------|----------|-------------|-----------|
+| **`elf2sbpf`** (default) | stock Zig 0.16 | bitcode → bpfel → [elf2sbpf][e2] | any 0.16 | ~80–95 % of baseline with `--peephole` |
+| **`fork-sbf`** (opt-in) | [solana-zig fork][fork] | direct `sbf-solana` native build | 0.16.0-dev.0+cf5f8113c | best (matches solana-zig v1.52 baseline) |
+
+[e2]: https://github.com/DaviRain-Su/elf2sbpf
+[fork]: https://github.com/DaviRain-Su/solana-zig-bootstrap/tree/solana-1.52-zig0.16
+
+Select with `-Dbackend=elf2sbpf` (default) or `-Dbackend=fork-sbf`.
 
 ## Features
 
@@ -58,6 +64,56 @@ This generates:
 2. `zig-out/lib/{example}.o` - BPF ELF (elf2sbpf back-end only;
    intermediate that `elf2sbpf` consumes)
 3. `zig-out/lib/{example}.so` - Final Solana program
+
+## fork-sbf backend (opt-in)
+
+If you have the [solana-zig fork][fork] installed, pass
+`-Dbackend=fork-sbf` to the solana-zig fork Zig binary to skip the
+`zig cc` + `elf2sbpf` pipeline entirely. The fork's built-in LLVM SBF
+target produces `.so` in one step:
+
+```bash
+SOLANA_ZIG=/path/to/solana-zig-bootstrap/out-smoke/host/bin/zig
+"$SOLANA_ZIG" build -Dexample=escrow -Dbackend=fork-sbf
+```
+
+Optional `-Dsbf-cpu=generic|v1|v2|v3` (default `v2`) selects the SBF
+feature set. Note: `v2+` uses the SBF-specific opcode encoding
+(`mem_encoding`, `no_lddw`, etc.), which requires an Agave 4.x+ runtime
+with SBF feature gates enabled — the default `mollusk-svm 0.12.1-agave-4.0`
+loader in `tests_rust/` does not yet configure these, so fork-sbf output
+cannot currently be executed through the local mollusk integration tests.
+Rosetta (which uses `solana-program-test`) runs fork-sbf programs fine.
+
+### `.so` size comparison (bytes)
+
+Measured on the 9 built-in examples, with elf2sbpf v0.1.0+D.7.10:
+
+| example         | elf2sbpf | elf2sbpf `--peephole` | fork-sbf v2 |
+|-----------------|---------:|----------------------:|------------:|
+| hello           |    1 192 |                 1 192 |       1 408 |
+| noop            |      304 |                   304 |       1 128 |
+| logonly         |    1 184 |                 1 184 |       1 408 |
+| counter         |    3 344 |                 3 344 |       3 352 |
+| transfer-sol    |    4 384 |                 4 216 |       3 760 |
+| pda-storage     |    8 728 |                 8 728 |       5 920 |
+| vault           |   12 256 |                12 192 |       8 024 |
+| escrow          |   18 616 |                18 064 |       9 752 |
+| token-vault     |   20 496 |                20 272 |      10 720 |
+
+Observations:
+
+- Trivially small programs (`hello`, `noop`, `logonly`): fork-sbf is
+  **larger** because SBF v2's section layout and padding has more fixed
+  overhead than raw eBPF. For micro programs this floor (~1.1 KB)
+  dominates.
+- Medium (`counter`, `transfer-sol`): roughly break-even.
+- Heavy Pubkey-comparing programs (`pda-storage`, `vault`, `escrow`,
+  `token-vault`): **fork-sbf wins 30–50 %** because the SBF LLVM
+  backend emits single-instruction unaligned u64 loads/stores
+  (`mem_encoding`) instead of byte-wise expansions, and uses
+  `static_syscalls` to fold away relocations. elf2sbpf's `--peephole`
+  recovers the byte-wise loads but has no equivalent for the rest.
 
 ## Testing
 
