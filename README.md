@@ -1,12 +1,10 @@
 # Solana BPF Programs with Zig
 
-Build Solana programs in Zig using the standard BPF target. Two
-back-ends are supported:
-
-- **[elf2sbpf](https://github.com/DaviRain-Su/elf2sbpf)** (default) —
-  pure Zig, no Rust / libLLVM / `LD_LIBRARY_PATH` hack
-- **[sbpf-linker](https://github.com/blueshift-gg/sbpf-linker)** — the
-  original Rust-based linker, kept as a fallback via `-Dlinker=sbpf-linker`
+Build Solana programs in Zig using the standard BPF target and an
+**[elf2sbpf](https://github.com/DaviRain-Su/elf2sbpf)**-based build
+pipeline. The toolchain stays simple: Zig emits LLVM bitcode, `zig cc`
+produces a BPF ELF object with Solana's 4 KB stack limit, and
+`elf2sbpf` converts that object into the final Solana SBPF program.
 
 ## Features
 
@@ -21,7 +19,7 @@ back-ends are supported:
 
 ## Prerequisites
 
-**Default — elf2sbpf back-end (recommended):**
+**elf2sbpf build pipeline (required):**
 
 ```bash
 # Install Zig 0.16.0 or later
@@ -36,32 +34,14 @@ cd ..
 # Install Node.js for testing
 ```
 
-That's it — no `cargo install`, no `libLLVM.so` symlink, no
-`LD_LIBRARY_PATH` juggling.
-
-**Fallback — sbpf-linker back-end (optional):**
-
-```bash
-# Install sbpf-linker from master (includes latest fixes)
-cargo install --git https://github.com/blueshift-gg/sbpf-linker.git
-```
-
-Then build with `zig build -Dlinker=sbpf-linker -Dexample=<name>`.
-
-**Note on SPL Token:** SPL Token support via the sbpf-linker back-end
-requires [sbpf-linker PR #14](https://github.com/blueshift-gg/sbpf-linker/pull/14)
-to be merged (adds `.rodata.cst32` section support for 32-byte
-constants). The elf2sbpf back-end handles this natively.
+That's it — no Rust toolchain, no `cargo install`, no `libLLVM.so`
+symlink, and no `LD_LIBRARY_PATH` juggling.
 
 ## Building
 
 ```bash
-# Default back-end (elf2sbpf)
+# Build an example
 zig build -Dexample=hello
-
-# Explicitly pick a back-end
-zig build -Dexample=hello -Dlinker=elf2sbpf
-zig build -Dexample=hello -Dlinker=sbpf-linker
 
 # Point to a non-PATH elf2sbpf binary
 zig build -Dexample=hello -Delf2sbpf-bin=/path/to/elf2sbpf
@@ -104,8 +84,7 @@ syscalls.log(&message);  // Calls sol_log_ with hash 0x207559bd
 ```
 
 The hash `0x207559bd` is computed as `murmur3_32("sol_log_", 0)` and
-resolved by Solana VM at runtime via `call -0x1` (under the elf2sbpf
-back-end) or an equivalent dynamic relocation (under sbpf-linker).
+resolved by the Solana VM at runtime via `call -0x1`.
 
 ### 2. Inline String Data
 
@@ -118,7 +97,7 @@ const message = [_]u8{'H','e','l','l','o',' ','w','o','r','l','d','!'};
 
 ### 3. Build Pipeline
 
-**Default (elf2sbpf):** three stages, pure Zig:
+Three stages, pure Zig + `elf2sbpf`:
 
 ```bash
 # 1. Zig → LLVM bitcode
@@ -133,12 +112,6 @@ zig cc -target bpfel-freestanding -mcpu=v2 -O2 \
 elf2sbpf entrypoint.o program.so
 ```
 
-**Fallback (sbpf-linker):** two stages, requires Rust + libLLVM:
-
-```bash
-zig build-lib -target bpfel-freestanding -femit-llvm-bc=entrypoint.bc
-sbpf-linker --cpu v2 --export entrypoint -o program.so entrypoint.bc
-```
 
 ## Zignocchio SDK
 
@@ -185,7 +158,7 @@ See [`sdk/README.md`](sdk/README.md) for complete documentation and [`examples/`
 
 ```
 .
-├── build.zig              # Automated build pipeline (elf2sbpf + sbpf-linker back-ends)
+├── build.zig              # Automated elf2sbpf-based build pipeline
 ├── build.zig.zon          # Zero dependencies
 ├── sdk/                   # Zignocchio SDK
 │   ├── zignocchio.zig     # Main SDK module

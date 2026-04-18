@@ -23,36 +23,39 @@ pub const build_zig =
     \\        "-Msdk=sdk/zignocchio.zig",
     \\    });
     \\
+    \\    const elf2sbpf_bin = b.option(
+    \\        []const u8,
+    \\        "elf2sbpf-bin",
+    \\        "Path to the elf2sbpf executable (default: look up on PATH)",
+    \\    ) orelse "elf2sbpf";
+    \\
     \\    const mkdir_step = b.addSystemCommand(&.{ "mkdir", "-p", "zig-out/lib" });
+    \\
+    \\    const obj_path = "zig-out/lib/program.o";
+    \\    const zig_cc = b.addSystemCommand(&.{
+    \\        "zig",
+    \\        "cc",
+    \\        "-target",
+    \\        "bpfel-freestanding",
+    \\        "-mcpu=v2",
+    \\        "-O2",
+    \\        "-mllvm",
+    \\        "-bpf-stack-size=4096",
+    \\        "-c",
+    \\        bitcode_path,
+    \\        "-o",
+    \\        obj_path,
+    \\    });
+    \\    zig_cc.step.dependOn(&gen_bitcode.step);
+    \\    zig_cc.step.dependOn(&mkdir_step.step);
     \\
     \\    const program_so_path = "zig-out/lib/program.so";
     \\    const link_program = b.addSystemCommand(&.{
-    \\        "sbpf-linker",
-    \\        "--cpu", "v2",
-    \\        "--llvm-args=-bpf-stack-size=4096",
-    \\        "--export", "entrypoint",
-    \\        "-o", program_so_path,
-    \\        bitcode_path,
+    \\        elf2sbpf_bin,
+    \\        obj_path,
+    \\        program_so_path,
     \\    });
-    \\    link_program.step.dependOn(&gen_bitcode.step);
-    \\    link_program.step.dependOn(&mkdir_step.step);
-    \\
-    \\    const llvm_fix_dir = ".zig-cache/llvm_fix";
-    \\    const mkdir_llvm_fix = b.addSystemCommand(&.{ "mkdir", "-p", llvm_fix_dir });
-    \\    const llvm_symlink = b.addSystemCommand(&.{
-    \\        "ln", "-sf",
-    \\        "/usr/lib/x86_64-linux-gnu/libLLVM.so.20.1",
-    \\        b.fmt("{s}/libLLVM.so", .{llvm_fix_dir}),
-    \\    });
-    \\    llvm_symlink.step.dependOn(&mkdir_llvm_fix.step);
-    \\    link_program.step.dependOn(&llvm_symlink.step);
-    \\
-    \\    const prev_ld_path = b.graph.environ_map.get("LD_LIBRARY_PATH") orelse "";
-    \\    const ld_library_path = if (prev_ld_path.len > 0)
-    \\        b.fmt("{s}:{s}", .{ llvm_fix_dir, prev_ld_path })
-    \\    else
-    \\        llvm_fix_dir;
-    \\    link_program.setEnvironmentVariable("LD_LIBRARY_PATH", ld_library_path);
+    \\    link_program.step.dependOn(&zig_cc.step);
     \\
     \\    b.getInstallStep().dependOn(&link_program.step);
     \\

@@ -659,7 +659,7 @@ pub fn read_pubkey(data: []const u8, offset: usize) sdk.ProgramError!sdk.Pubkey 
 
 **必须包含的章节**：
 
-1. **版本检查清单** — 使用前检查 Zig 版本、Solana 版本、sbpf-linker 版本
+1. **版本检查清单** — 使用前检查 Zig 版本、Solana 版本、elf2sbpf 版本/路径
 2. **知识来源声明** — "你的训练数据可能不包含 Zignocchio / Zig BPF，请以本 SDK 的 doc comments 为准"
 3. **快速入口** — `const sdk = @import("sdk/zignocchio.zig")`
 4. **安全编码清单** — 每个 instruction 开头必须调用的 guard 序列

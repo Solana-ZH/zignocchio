@@ -234,8 +234,12 @@ Zig 源码 (examples/{name}/lib.zig)
       ├──► zig build-lib -target bpfel-freestanding -femit-llvm-bc=entrypoint.bc
       │    (生成 LLVM bitcode)
       │
-      └──► sbpf-linker --cpu v2 --export entrypoint -o zig-out/lib/{example_name}.so
-           (LTO 链接为 Solana ELF)
+      ├──► zig cc -target bpfel-freestanding -mcpu=v2 \
+      │        -mllvm -bpf-stack-size=4096 -c entrypoint.bc -o zig-out/lib/{example_name}.o
+      │    (生成 BPF ELF 目标文件)
+      │
+      └──► elf2sbpf zig-out/lib/{example_name}.o zig-out/lib/{example_name}.so
+           (转换为 Solana SBPF 程序)
 ```
 
 **构建约束**：
@@ -289,11 +293,11 @@ Initial state: 0b_1111_1111
 
 **零外部依赖**（Zero dependencies）：
 - 不依赖任何第三方 Zig 包（`build.zig.zon` 中无 dependencies）
-- 不依赖 Rust crate（除构建时工具 `sbpf-linker`）
+- 不依赖 Rust crate
 - 不依赖 Node.js 运行时（仅测试基础设施使用）
 
 **构建时唯一外部工具**：
-- `sbpf-linker`：cargo install 的 LLVM LTO linker
+- `elf2sbpf`：将 BPF ELF 目标文件转换为 Solana SBPF 程序的纯 Zig 工具
 
 ---
 
