@@ -93,7 +93,6 @@ fn test_escrow_make_and_accept() {
             keyed_account_for_system_program(),
         ],
     );
-    eprintln!("[CU] {}:{} {} CU", file!(), line!(), result.compute_units_consumed);
 
     assert!(
         !result.program_result.is_err(),
@@ -188,7 +187,6 @@ fn test_escrow_make_and_refund() {
             keyed_account_for_system_program(),
         ],
     );
-    eprintln!("[CU] {}:{} {} CU", file!(), line!(), result.compute_units_consumed);
     assert!(!result.program_result.is_err());
 
     let escrow_post = &result.resulting_accounts[1].1;
@@ -265,7 +263,6 @@ fn test_escrow_accept_by_unauthorized_taker_fails() {
             keyed_account_for_system_program(),
         ],
     );
-    eprintln!("[CU] {}:{} {} CU", file!(), line!(), result.compute_units_consumed);
     assert!(!result.program_result.is_err());
 
     let escrow_post = &result.resulting_accounts[1].1;

@@ -57,7 +57,6 @@ fn test_counter_increment() {
     };
 
     let result = mollusk.process_instruction(&ix, &[(counter, counter_acc)]);
-    eprintln!("[CU] {}:{} {} CU", file!(), line!(), result.compute_units_consumed);
     assert!(
         !result.program_result.is_err(),
         "counter increment should succeed: {:?}",

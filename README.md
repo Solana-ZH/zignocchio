@@ -4,7 +4,7 @@ Build Solana programs in Zig using one of two back-ends:
 
 | Backend | Compiler | Pipeline | Zig version | CU / size |
 |---------|----------|----------|-------------|-----------|
-| **`elf2sbpf`** (default) | stock Zig 0.16 | bitcode → bpfel → [elf2sbpf][e2] | any 0.16 | ~80–95 % of baseline with `--peephole` |
+| **`elf2sbpf`** (default) | stock Zig 0.16 | bitcode → bpfel → [elf2sbpf][e2] | any 0.16 | worse than baseline (no CU optimizer) |
 | **`fork-sbf`** (opt-in) | [solana-zig fork][fork] | direct `sbf-solana` native build | 0.16.0-dev.0+cf5f8113c | best (matches solana-zig v1.52 baseline) |
 
 [e2]: https://github.com/DaviRain-Su/elf2sbpf
@@ -87,36 +87,36 @@ Rosetta (which uses `solana-program-test`) runs fork-sbf programs fine.
 
 ### `.so` size comparison (bytes)
 
-Measured on the 9 built-in examples, with elf2sbpf v0.1.0+D.7.10:
+Measured on the 9 built-in examples:
 
-| example         | elf2sbpf | elf2sbpf `--peephole` | fork-sbf v2 |
-|-----------------|---------:|----------------------:|------------:|
-| hello           |    1 192 |                 1 192 |       1 408 |
-| noop            |      304 |                   304 |       1 128 |
-| logonly         |    1 184 |                 1 184 |       1 408 |
-| counter         |    3 344 |                 3 344 |       3 352 |
-| transfer-sol    |    4 384 |                 4 216 |       3 760 |
-| pda-storage     |    8 728 |                 8 728 |       5 920 |
-| vault           |   12 256 |                12 192 |       8 024 |
-| escrow          |   18 616 |                18 064 |       9 752 |
-| token-vault     |   20 496 |                20 272 |      10 720 |
+| example         | elf2sbpf | fork-sbf v2 |
+|-----------------|---------:|------------:|
+| hello           |    1 192 |       1 408 |
+| noop            |      304 |       1 128 |
+| logonly         |    1 184 |       1 408 |
+| counter         |    3 344 |       3 352 |
+| transfer-sol    |    4 384 |       3 760 |
+| pda-storage     |    8 728 |       5 920 |
+| vault           |   12 256 |       8 024 |
+| escrow          |   18 616 |       9 752 |
+| token-vault     |   20 496 |      10 720 |
 
 ### CU consumption comparison (mollusk-svm)
 
 Per the integration tests in `tests_rust/examples/`, measured via
 `eprintln!("[CU] ...")` right after `mollusk.process_instruction`:
 
-| test                                       | elf2sbpf | elf2sbpf `--peephole` | fork-sbf v2 |
-|--------------------------------------------|---------:|----------------------:|------------:|
-| hello                                      |      107 |                   107 |           * |
-| counter (increment)                        |      969 |                   969 |           * |
-| escrow (make_and_accept)                   |    8 053 |               **FAIL** |           * |
-| escrow (make_and_refund)                   |   17 053 |               **FAIL** |           * |
-| escrow (accept_by_unauthorized)            |    8 053 |               **FAIL** |           * |
-| pda_storage (init_and_update)              |    4 730 |                 4 730 |           * |
-| pda_storage (wrong_signer_fails)           |    6 230 |                 6 230 |           * |
-| transfer_sol (happy)                       |    3 013 |                 2 992 |           * |
-| vault (deposit_happy)                      |    6 669 |                 6 669 |           * |
+| test                                       | elf2sbpf | fork-sbf v2 |
+|--------------------------------------------|---------:|------------:|
+| hello                                      |      107 |           * |
+| counter (increment)                        |      969 |           * |
+| escrow (make_and_accept)                   |    8 053 |           * |
+| escrow (make_and_refund)                   |   17 053 |           * |
+| escrow (accept_by_unauthorized)            |    8 053 |           * |
+| pda_storage (init_and_update)              |    4 730 |           * |
+| pda_storage (wrong_signer_fails)           |    6 230 |           * |
+| transfer_sol (happy)                       |    3 013 |           * |
+| vault (deposit_happy)                      |    6 669 |           * |
 
 `*` = fork-sbf programs cannot currently be loaded by mollusk-svm
 0.12.1-agave-4.0's default `BPFLoaderUpgradeable` — SBF v2 opcodes
@@ -125,14 +125,12 @@ fail verification (`RelativeJumpOutOfBounds`). Solana-program-rosetta's
 repo's README for fork-sbf CU numbers (they match the `solana-zig`
 official v1.52.0 baseline within ±0 CU).
 
-**Note on peephole regression**: the `elf2sbpf --peephole` pass (D.7.10
-V2.1/V2.2) miscompiles escrow's control flow — all three escrow
-integration tests fail with `Access violation in unknown section at
-address 0xfffffffffffffe98`. This is a real bug in the peephole
-rewriter on patterns that the existing 9 rosetta programs didn't
-exercise. Tracked upstream at
-[DaviRain-Su/elf2sbpf](https://github.com/DaviRain-Su/elf2sbpf). The
-default elf2sbpf path (no `--peephole`) is unaffected.
+> An opt-in `--peephole` pass existed in earlier elf2sbpf and was
+> explored here for CU optimization. It was rolled back upstream
+> 2026-04-19 after exposing a miscompile on escrow's control flow
+> (`Access violation at 0xfffffffffffffe98`). The column is removed
+> from this README; the current elf2sbpf only offers the default
+> byte-equivalent path.
 
 ### Key takeaways
 
@@ -143,11 +141,9 @@ default elf2sbpf path (no `--peephole`) is unaffected.
 - **Heavy Pubkey-manipulating programs** (`pda-storage`, `vault`,
   `escrow`, `token-vault`): **fork-sbf wins 30–50 % on size** because
   the SBF LLVM backend emits unaligned u64 loads/stores as single
-  instructions (`mem_encoding`) and folds syscalls via
-  `static_syscalls`. elf2sbpf's `--peephole` recovers some of the
-  byte-wise loads but has no equivalent for the rest.
-- **Peephole has a known miscompile on escrow** — prefer the default
-  elf2sbpf path until that is fixed.
+  instructions (`mem_encoding`) and folds syscalls via `static_syscalls`.
+- **For optimal CU, use the fork-sbf backend** — elf2sbpf is the
+  zero-dependency path for stock Zig users who can't install the fork.
 
 ## Testing
 
