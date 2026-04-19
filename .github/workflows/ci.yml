@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "solana-zig-fork-0.16-backend"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ZIG_VERSION: "0.16.0"
+  # sbpf-linker published version; pin to keep CI reproducible.
+  SBPF_LINKER_VERSION: "0.1.8"
+
+jobs:
+  # -------------------------------------------------------------------
+  # Default backend (sbpf-linker) — build + all tests. The one source
+  # of truth for "does the repo still work". Mirrors
+  # `npm run ci:sbpf-linker`.
+  # -------------------------------------------------------------------
+  ci-sbpf-linker:
+    name: ci-sbpf-linker (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Zig ${{ env.ZIG_VERSION }}
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Set up Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry + git
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('tests_rust/Cargo.lock', 'tests_agave/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install LLVM (ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-18-dev
+          echo "LD_LIBRARY_PATH=/usr/lib/llvm-18/lib:${LD_LIBRARY_PATH:-}" >> $GITHUB_ENV
+
+      - name: Install LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install llvm
+          BREW_LLVM_LIB="$(brew --prefix llvm)/lib"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=${BREW_LLVM_LIB}" >> $GITHUB_ENV
+
+      - name: Install sbpf-linker
+        run: cargo install sbpf-linker --version ${{ env.SBPF_LINKER_VERSION }} --locked
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: npm install
+        run: npm install --no-audit --no-fund
+
+      - name: Run full CI (ci:sbpf-linker)
+        run: npm run ci:sbpf-linker
+
+  # -------------------------------------------------------------------
+  # Fork-sbf backend smoke — exists to keep the alternative build path
+  # working, but does NOT run tests (the fork Zig binary is large and
+  # we don't bake it into CI caches yet). Skipped on PRs; runs on push
+  # to main + manual dispatch.
+  # -------------------------------------------------------------------
+  ci-fork-sbf-smoke:
+    name: ci-fork-sbf-smoke (build-only)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch solana-zig fork binary
+        run: |
+          # Tag / URL not yet published — skip if missing.
+          echo "solana-zig fork pre-built binaries are not yet published;"
+          echo "this job is a placeholder until we ship them."
+          echo "Track: https://github.com/DaviRain-Su/solana-zig-bootstrap/tree/solana-1.52-zig0.16"
+          exit 0
+
+  # -------------------------------------------------------------------
+  # Formatting check — fast, always runs. Scoped to actively-maintained
+  # files. `cli/src/template.zig` contains multi-line string templates
+  # that `zig fmt` cannot parse; excluded until we rework it as a raw
+  # file asset.
+  # -------------------------------------------------------------------
+  fmt-check:
+    name: fmt-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: zig fmt --check (build.zig + examples)
+        run: zig fmt --check build.zig examples/

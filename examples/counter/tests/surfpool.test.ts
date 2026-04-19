@@ -10,6 +10,9 @@ import {
 import { execSync, spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { buildExampleProgram } from '../../../client/src/build';
+
+jest.setTimeout(180000);
 
 describe('Counter Program', () => {
   let validator: ChildProcess;
@@ -31,7 +34,7 @@ describe('Counter Program', () => {
 
     // Build the counter program
     console.log('Building counter program...');
-    execSync('zig build -Dexample=counter', { stdio: 'inherit' });
+    buildExampleProgram('counter');
 
     // Generate program keypair for deployment
     const programKeypair = Keypair.generate();
@@ -150,7 +153,7 @@ describe('Counter Program', () => {
     await sendAndConfirmTransaction(connection, tx, [payer, counterAccount]);
 
     console.log('Counter account created:', counterAccount.publicKey.toBase58());
-  }, 60000); // 60 second timeout
+  }, 180000);
 
   afterAll(async () => {
     // Stop surfpool

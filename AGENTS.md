@@ -31,14 +31,27 @@
 | `examples/escrow/lib.zig` | Full security flow example |
 | `client/src/litesvm.ts` | v1 → `@solana/kit` adapter |
 | `examples/{name}/tests/` | TypeScript integration tests (litesvm + surfpool) |
-| `tests_rust/examples/` | Rust `mollusk-svm` tests that load Zig `.so` files |
+| `tests_rust/examples/` | Rust `mollusk-svm` tests (load `elf2sbpf`-flavored `.so`; default CI path) |
+| `tests_agave/examples/` | Rust `solana-program-test = "=2.1.21"` harness (loads `fork-sbf` `.so`; experimental) |
+| `tools/ci-sbpf-linker.sh` | Full CI entrypoint (`npm run ci:sbpf-linker`) |
+| `tools/compare-backends.sh`, `tools/compare_backends.py` | `.so` size + build-time benchmarks between backends |
+| `.github/workflows/ci.yml` | GitHub Actions pipeline that calls `ci:sbpf-linker` |
 | `docs/` | PRD / architecture docs |
 
 ## Quick Commands
 
 ```bash
-# Build an example
+# Build an example (default backend: sbpf-linker)
 zig build -Dexample=hello
+
+# Build with the fork-sbf backend (requires solana-zig fork binary)
+"$SOLANA_ZIG" build -Dexample=hello -Dbackend=fork-sbf
+
+# Full CI (mirrors GitHub Actions)
+npm run ci:sbpf-linker
+
+# Backend comparison (size + build-time)
+SOLANA_ZIG=/path/to/fork/zig npm run compare:backends
 
 # Run Zig unit tests
 zig build test

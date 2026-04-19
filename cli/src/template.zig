@@ -5,59 +5,7 @@ pub const build_zig =
     \\
     \\pub fn build(b: *std.Build) !void {
     \\    const optimize = .ReleaseSmall;
-    \\
-    \\    const bitcode_path = "entrypoint.bc";
-    \\    const lib_path = "src/lib.zig";
-    \\
-    \\    const gen_bitcode = b.addSystemCommand(&.{
-    \\        "zig",
-    \\        "build-lib",
-    \\        "-target",
-    \\        "bpfel-freestanding",
-    \\        "-O",
-    \\        "ReleaseSmall",
-    \\        "-femit-llvm-bc=" ++ bitcode_path,
-    \\        "-fno-emit-bin",
-    \\        "--dep", "sdk",
-    \\        b.fmt("-Mroot={s}", .{lib_path}),
-    \\        "-Msdk=sdk/zignocchio.zig",
-    \\    });
-    \\
-    \\    const elf2sbpf_bin = b.option(
-    \\        []const u8,
-    \\        "elf2sbpf-bin",
-    \\        "Path to the elf2sbpf executable (default: look up on PATH)",
-    \\    ) orelse "elf2sbpf";
-    \\
-    \\    const mkdir_step = b.addSystemCommand(&.{ "mkdir", "-p", "zig-out/lib" });
-    \\
-    \\    const obj_path = "zig-out/lib/program.o";
-    \\    const zig_cc = b.addSystemCommand(&.{
-    \\        "zig",
-    \\        "cc",
-    \\        "-target",
-    \\        "bpfel-freestanding",
-    \\        "-mcpu=v2",
-    \\        "-O2",
-    \\        "-mllvm",
-    \\        "-bpf-stack-size=4096",
-    \\        "-c",
-    \\        bitcode_path,
-    \\        "-o",
-    \\        obj_path,
-    \\    });
-    \\    zig_cc.step.dependOn(&gen_bitcode.step);
-    \\    zig_cc.step.dependOn(&mkdir_step.step);
-    \\
-    \\    const program_so_path = "zig-out/lib/program.so";
-    \\    const link_program = b.addSystemCommand(&.{
-    \\        elf2sbpf_bin,
-    \\        obj_path,
-    \\        program_so_path,
-    \\    });
-    \\    link_program.step.dependOn(&zig_cc.step);
-    \\
-    \\    b.getInstallStep().dependOn(&link_program.step);
+    \\    try buildDirectSbf(b, "src/lib.zig", optimize);
     \\
     \\    const test_step = b.step("test", "Run unit tests");
     \\    const sdk_module = b.createModule(.{
@@ -74,6 +22,83 @@ pub const build_zig =
     \\    });
     \\    const run_unit_tests = b.addRunArtifact(lib_unit_tests);
     \\    test_step.dependOn(&run_unit_tests.step);
+    \\}
+    \\
+    \\fn buildDirectSbf(b: *std.Build, lib_path: []const u8, optimize: std.builtin.OptimizeMode) !void {
+    \\    const cpu_features = b.option(
+    \\        []const u8,
+    \\        "sbf-cpu",
+    \\        "SBF CPU model: baseline (default) / generic / v1 / v2 / v3. v2+ requires an Agave 4.x+ runtime with SBF feature gates enabled.",
+    \\    ) orelse "baseline";
+    \\
+    \\    const query = std.Target.Query.parse(.{
+    \\        .arch_os_abi = "sbf-solana-none",
+    \\        .cpu_features = cpu_features,
+    \\    }) catch |err| {
+    \\        std.log.err("direct SBF builds require the solana-zig fork (see README). Parse error: {s}", .{@errorName(err)});
+    \\        return error.ForkZigRequired;
+    \\    };
+    \\    const target = b.resolveTargetQuery(query);
+    \\
+    \\    const sdk_module = b.createModule(.{
+    \\        .root_source_file = b.path("sdk/zignocchio.zig"),
+    \\        .target = target,
+    \\        .optimize = optimize,
+    \\    });
+    \\
+    \\    const program_mod = b.createModule(.{
+    \\        .root_source_file = b.path(lib_path),
+    \\        .target = target,
+    \\        .optimize = optimize,
+    \\        .imports = &.{
+    \\            .{ .name = "sdk", .module = sdk_module },
+    \\        },
+    \\    });
+    \\    program_mod.pic = true;
+    \\    program_mod.strip = true;
+    \\
+    \\    const program = b.addLibrary(.{
+    \\        .name = "program",
+    \\        .linkage = .dynamic,
+    \\        .root_module = program_mod,
+    \\    });
+    \\    program.entry = .{ .symbol_name = "entrypoint" };
+    \\    program.stack_size = 4096;
+    \\    program.link_z_notext = true;
+    \\
+    \\    const write_file_step = b.addWriteFiles();
+    \\    const linker_script = write_file_step.add("bpf.ld",
+    \\        \\PHDRS
+    \\        \\{
+    \\        \\text PT_LOAD  ;
+    \\        \\rodata PT_LOAD ;
+    \\        \\data PT_LOAD ;
+    \\        \\dynamic PT_DYNAMIC ;
+    \\        \\}
+    \\        \\
+    \\        \\SECTIONS
+    \\        \\{
+    \\        \\. = SIZEOF_HEADERS;
+    \\        \\.text : { *(.text*) } :text
+    \\        \\.rodata : { *(.rodata*) } :rodata
+    \\        \\.data.rel.ro : { *(.data.rel.ro*) } :rodata
+    \\        \\.dynamic : { *(.dynamic) } :dynamic
+    \\        \\.dynsym : { *(.dynsym) } :data
+    \\        \\.dynstr : { *(.dynstr) } :data
+    \\        \\.rel.dyn : { *(.rel.dyn) } :data
+    \\        \\/DISCARD/ : {
+    \\        \\*(.eh_frame*)
+    \\        \\*(.gnu.hash*)
+    \\        \\*(.hash*)
+    \\        \\}
+    \\        \\}
+    \\    );
+    \\    program.step.dependOn(&write_file_step.step);
+    \\    program.setLinkerScript(linker_script);
+    \\
+    \\    const so = program.getEmittedBin();
+    \\    const install = b.addInstallLibFile(so, "program.so");
+    \\    b.getInstallStep().dependOn(&install.step);
     \\}
     \\
 ;
@@ -172,143 +197,3 @@ pub const lib_zig =
     \\    accounts: []sdk.AccountInfo,
     \\    instruction_data: []const u8,
     \\) sdk.ProgramResult {
-    \\    if (instruction_data.len < 1) return error.InvalidInstructionData;
-    \\    const discriminator = instruction_data[0];
-    \\    switch (discriminator) {
-    \\        INSTRUCTION_INIT => try processInitialize(program_id, accounts),
-    \\        else => return error.InvalidInstructionData,
-    \\    }
-    \\}
-    \\
-    \\pub const entrypoint = sdk.createEntrypointWithMaxAccounts(6, processInstruction);
-    \\
-;
-
-pub const test_ts =
-    \\import {
-    \\  Connection,
-    \\  Keypair,
-    \\  PublicKey,
-    \\  Transaction,
-    \\  TransactionInstruction,
-    \\  sendAndConfirmTransaction,
-    \\} from '@solana/web3.js';
-    \\import { execSync, spawn } from 'child_process';
-    \\import * as fs from 'fs';
-    \\import * as path from 'path';
-    \\
-    \\describe('%%NAME%% Program', () => {
-    \\  let validator: ReturnType<typeof spawn>;
-    \\  let connection: Connection;
-    \\  let programId: PublicKey;
-    \\  let payer: Keypair;
-    \\
-    \\  const INIT = 0;
-    \\
-    \\  beforeAll(async () => {
-    \\    try { execSync('pkill -f surfpool', { stdio: 'ignore' }); } catch (e) {}
-    \\    await new Promise(r => setTimeout(r, 2000));
-    \\
-    \\    console.log('Building program...');
-    \\    execSync('zig build', { stdio: 'inherit' });
-    \\
-    \\    const programKeypair = Keypair.generate();
-    \\    programId = programKeypair.publicKey;
-    \\    console.log('Program ID:', programId.toBase58());
-    \\
-    \\    const programKeypairPath = path.join(__dirname, 'program-keypair.json');
-    \\    fs.writeFileSync(programKeypairPath, JSON.stringify(Array.from(programKeypair.secretKey)));
-    \\
-    \\    const programPath = path.join(__dirname, 'zig-out', 'lib', 'program.so');
-    \\    if (!fs.existsSync(programPath)) {
-    \\      throw new Error(`Program not found at ${programPath}`);
-    \\    }
-    \\
-    \\    console.log('Starting surfpool...');
-    \\    validator = spawn('surfpool', ['start', '--ci', '--no-tui', '--offline'], {
-    \\      detached: true,
-    \\      stdio: ['ignore', 'pipe', 'pipe'],
-    \\    });
-    \\    validator.unref();
-    \\    await new Promise(r => setTimeout(r, 5000));
-    \\
-    \\    connection = new Connection('http://localhost:8899', 'confirmed');
-    \\
-    \\    payer = Keypair.generate();
-    \\    const airdropSig = await connection.requestAirdrop(payer.publicKey, 2_000_000_000);
-    \\    await connection.confirmTransaction(airdropSig);
-    \\    console.log('Payer funded:', payer.publicKey.toBase58());
-    \\
-    \\    const programData = fs.readFileSync(programPath);
-    \\    const deployRes = await fetch('http://127.0.0.1:8899', {
-    \\      method: 'POST',
-    \\      headers: { 'Content-Type': 'application/json' },
-    \\      body: JSON.stringify({
-    \\        jsonrpc: '2.0',
-    \\        id: 1,
-    \\        method: 'surfnet_setAccount',
-    \\        params: [
-    \\          programId.toBase58(),
-    \\          {
-    \\            lamports: 1000000000,
-    \\            data: programData.toString('hex'),
-    \\            owner: 'BPFLoader2111111111111111111111111111111111',
-    \\            executable: true,
-    \\          },
-    \\        ],
-    \\      }),
-    \\    });
-    \\    const deployJson = await deployRes.json() as any;
-    \\    if (deployJson.error) {
-    \\      throw new Error(`Deploy failed: ${deployJson.error.message}`);
-    \\    }
-    \\
-    \\    let ready = false;
-    \\    for (let i = 0; i < 10; i++) {
-    \\      const info = await connection.getAccountInfo(programId);
-    \\      if (info && info.executable) { ready = true; break; }
-    \\      await new Promise(r => setTimeout(r, 500));
-    \\    }
-    \\    if (!ready) throw new Error('Program not executable');
-    \\    console.log('Program deployed successfully!');
-    \\  }, 60000);
-    \\
-    \\  afterAll(async () => {
-    \\    try { (connection as any)._rpcWebSocket?.close(); } catch (e) {}
-    \\    try { execSync('pkill -f surfpool'); } catch (e) {}
-    \\    try {
-    \\      fs.unlinkSync(path.join(__dirname, 'program-keypair.json'));
-    \\    } catch (e) {}
-    \\    await new Promise(r => setTimeout(r, 100));
-    \\  });
-    \\
-    \\  function findCounterPDA(ownerPubkey: PublicKey): PublicKey {
-    \\    const [pda] = PublicKey.findProgramAddressSync(
-    \\      [Buffer.from('counter'), ownerPubkey.toBuffer()],
-    \\      programId
-    \\    );
-    \\    return pda;
-    \\  }
-    \\
-    \\  it('should initialize counter', async () => {
-    \\    const counter = findCounterPDA(payer.publicKey);
-    \\    const data = Buffer.from([INIT]);
-    \\    const ix = new TransactionInstruction({
-    \\      keys: [
-    \\        { pubkey: payer.publicKey, isSigner: true, isWritable: true },
-    \\        { pubkey: counter, isSigner: false, isWritable: true },
-    \\        { pubkey: PublicKey.default, isSigner: false, isWritable: false }, // system program
-    \\      ],
-    \\      programId,
-    \\      data,
-    \\    });
-    \\    const tx = new Transaction().add(ix);
-    \\    const signature = await sendAndConfirmTransaction(connection, tx, [payer]);
-    \\    console.log('Initialize signature:', signature);
-    \\    const accountInfo = await connection.getAccountInfo(counter);
-    \\    expect(accountInfo).not.toBeNull();
-    \\    expect(accountInfo!.data[0]).toBe(0xC0);
-    \\  });
-    \\});
-    \\
-;

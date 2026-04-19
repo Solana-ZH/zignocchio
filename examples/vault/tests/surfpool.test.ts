@@ -10,6 +10,9 @@ import {
 import { execSync, spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { buildExampleProgram } from '../../../client/src/build';
+
+jest.setTimeout(180000);
 
 describe('Vault Program', () => {
   let validator: ChildProcess;
@@ -35,7 +38,7 @@ describe('Vault Program', () => {
 
     // Build the vault program
     console.log('Building vault program...');
-    execSync('zig build -Dexample=vault', { stdio: 'inherit' });
+    buildExampleProgram('vault');
 
     // Generate program keypair for deployment
     const programKeypair = Keypair.generate();
@@ -146,7 +149,7 @@ describe('Vault Program', () => {
     await connection.confirmTransaction(userAirdropSig);
     console.log('User funded:', user.publicKey.toBase58());
 
-  }, 60000); // 60 second timeout
+  }, 180000);
 
   afterAll(async () => {
     // Close the connection to prevent hanging

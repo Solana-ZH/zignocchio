@@ -16,7 +16,7 @@ import {
   lamports,
 } from '@solana/kit';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { buildExampleProgram } from '../../../client/src/build';
 
 const projectRoot = path.join(__dirname, '..', '..', '..');
 
@@ -24,7 +24,7 @@ describe('litesvm logonly isolation test', () => {
   const programPath = path.join(projectRoot, 'zig-out', 'lib', 'logonly.so');
 
   beforeAll(() => {
-    execSync('zig build -Dexample=logonly', { stdio: 'inherit', cwd: projectRoot });
+    buildExampleProgram('logonly', { projectRoot });
   });
 
   it('executes a program that only calls sol_log_', async () => {

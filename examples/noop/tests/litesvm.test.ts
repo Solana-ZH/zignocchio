@@ -16,7 +16,7 @@ import {
   lamports,
 } from '@solana/kit';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { buildExampleProgram } from '../../../client/src/build';
 
 const projectRoot = path.join(__dirname, '..', '..', '..');
 
@@ -24,7 +24,7 @@ describe('litesvm noop isolation test', () => {
   const programPath = path.join(projectRoot, 'zig-out', 'lib', 'noop.so');
 
   beforeAll(() => {
-    execSync('zig build -Dexample=noop', { stdio: 'inherit', cwd: projectRoot });
+    buildExampleProgram('noop', { projectRoot });
   });
 
   it('executes a noop program with zero syscalls', async () => {

@@ -10,6 +10,9 @@ import {
 import { execSync, spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { buildExampleProgram } from '../../../client/src/build';
+
+jest.setTimeout(180000);
 
 describe('Transfer SOL Program', () => {
   let validator: ChildProcess;
@@ -24,7 +27,7 @@ describe('Transfer SOL Program', () => {
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     console.log('Building transfer-sol program...');
-    execSync('zig build -Dexample=transfer-sol', { stdio: 'inherit' });
+    buildExampleProgram('transfer-sol');
 
     const programKeypair = Keypair.generate();
     programId = programKeypair.publicKey;
@@ -96,7 +99,7 @@ describe('Transfer SOL Program', () => {
     if (!programReady) {
       throw new Error('Program not executable');
     }
-  }, 60000);
+  }, 180000);
 
   afterAll(async () => {
     try {
@@ -125,6 +128,29 @@ describe('Transfer SOL Program', () => {
     });
   }
 
+  async function sendAndConfirmWithRetry(
+    transaction: Transaction,
+    signers: Keypair[],
+    retries = 3
+  ): Promise<string> {
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        return await sendAndConfirmTransaction(connection, transaction, signers);
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes('receiving on an empty and disconnected channel')) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+
+    throw lastError;
+  }
+
   it('should transfer lamports from signer to recipient', async () => {
     const recipient = Keypair.generate();
     const amount = 100_000_000; // 0.1 SOL
@@ -134,7 +160,7 @@ describe('Transfer SOL Program', () => {
 
     const instruction = createTransferInstruction(payer.publicKey, recipient.publicKey, amount);
     const transaction = new Transaction().add(instruction);
-    const signature = await sendAndConfirmTransaction(connection, transaction, [payer]);
+    const signature = await sendAndConfirmWithRetry(transaction, [payer]);
 
     console.log('Transfer signature:', signature);
 
@@ -151,8 +177,8 @@ describe('Transfer SOL Program', () => {
     const logs = txDetails?.meta?.logMessages || [];
     console.log('Transfer logs:', logs);
 
-    const hasSuccessLog = logs.some(log => log.includes('transfer-sol: success'));
-    expect(hasSuccessLog).toBe(true);
+    const hasProgramSuccess = logs.some(log => log.includes(`${programId.toBase58()} success`));
+    expect(hasProgramSuccess).toBe(true);
   });
 
   it('should fail transfer with non-signer', async () => {

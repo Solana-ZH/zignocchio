@@ -7,6 +7,10 @@ autobins = false
 autoexamples = false
 autotests = false
 
+[[bin]]
+name = "cu_probe"
+path = "bin/cu_probe.rs"
+
 [dependencies]
 mollusk-svm = "0.12.1-agave-4.0"
 solana-pubkey = "4.2.0"
@@ -20,21 +24,61 @@ name = "hello_mollusk"
 path = "examples/hello.rs"
 
 [[test]]
+name = "hello_lazy_mollusk"
+path = "examples/hello_lazy.rs"
+
+[[test]]
 name = "counter_mollusk"
 path = "examples/counter.rs"
+
+[[test]]
+name = "counter_lazy_mollusk"
+path = "examples/counter_lazy.rs"
 
 [[test]]
 name = "vault_mollusk"
 path = "examples/vault.rs"
 
 [[test]]
+name = "vault_lazy_mollusk"
+path = "examples/vault_lazy.rs"
+
+[[test]]
 name = "transfer_sol_mollusk"
 path = "examples/transfer_sol.rs"
+
+[[test]]
+name = "transfer_sol_lazy_mollusk"
+path = "examples/transfer_sol_lazy.rs"
+
+[[test]]
+name = "transfer_owned_mollusk"
+path = "examples/transfer_owned.rs"
+
+[[test]]
+name = "transfer_owned_lazy_mollusk"
+path = "examples/transfer_owned_lazy.rs"
 
 [[test]]
 name = "pda_storage_mollusk"
 path = "examples/pda_storage.rs"
 
 [[test]]
+name = "pda_storage_lazy_mollusk"
+path = "examples/pda_storage_lazy.rs"
+
+[[test]]
 name = "escrow_mollusk"
 path = "examples/escrow.rs"
+
+[[test]]
+name = "escrow_lazy_mollusk"
+path = "examples/escrow_lazy.rs"
+
+[[test]]
+name = "noop_lazy_mollusk"
+path = "examples/noop_lazy.rs"
+
+[[test]]
+name = "logonly_lazy_mollusk"
+path = "examples/logonly_lazy.rs"

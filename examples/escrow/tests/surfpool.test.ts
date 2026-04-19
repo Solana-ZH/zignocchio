@@ -10,6 +10,9 @@ import {
 import { execSync, spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { buildExampleProgram } from '../../../client/src/build';
+
+jest.setTimeout(180000);
 
 describe('Escrow Program', () => {
   let validator: ChildProcess;
@@ -30,7 +33,7 @@ describe('Escrow Program', () => {
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     console.log('Building escrow program...');
-    execSync('zig build -Dexample=escrow', { stdio: 'inherit' });
+    buildExampleProgram('escrow');
 
     const programKeypair = Keypair.generate();
     programId = programKeypair.publicKey;
@@ -116,7 +119,7 @@ describe('Escrow Program', () => {
     }
     console.log('Maker funded:', maker.publicKey.toBase58());
     console.log('Taker funded:', taker.publicKey.toBase58());
-  }, 60000);
+  }, 180000);
 
   afterAll(async () => {
     if (connection) {

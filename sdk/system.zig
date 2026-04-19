@@ -4,7 +4,40 @@
 //! details, exposing a high-level Zig API for common System Program operations.
 
 const sdk = @import("zignocchio.zig");
+const syscalls = @import("syscalls.zig");
+const errors = @import("errors.zig");
 const std = @import("std");
+
+const FastAccountMeta = extern struct {
+    pubkey: *const sdk.Pubkey,
+    is_writable: bool,
+    is_signer: bool,
+};
+
+const FastInstruction = extern struct {
+    program_id: *const sdk.Pubkey,
+    accounts: [*]const FastAccountMeta,
+    account_len: u64,
+    data: [*]const u8,
+    data_len: u64,
+};
+
+const FastSolAccountInfo = extern struct {
+    key: *const sdk.Pubkey,
+    lamports: *u64,
+    data_len: u64,
+    data: [*]u8,
+    owner: *const sdk.Pubkey,
+    rent_epoch: u64,
+    is_signer: bool,
+    is_writable: bool,
+    executable: bool,
+};
+
+const FastSignerSeeds = extern struct {
+    addr: u64,
+    len: u64,
+};
 
 /// Write the System Program ID into the provided output buffer.
 /// Uses a stack copy to avoid the Zig 0.16 BPF module-scope const address trap.
@@ -120,28 +153,83 @@ pub fn transfer(
     to: sdk.AccountInfo,
     amount: u64,
 ) sdk.ProgramResult {
+    return transferRaw(from.raw, to.raw, from.key(), to.key(), from.dataPtr(), to.dataPtr(), amount);
+}
+
+/// Transfer lamports via System Program CPI using lazy account wrappers.
+pub fn transferLazy(
+    from: sdk.LazyAccount,
+    to: sdk.LazyAccount,
+    amount: u64,
+) sdk.ProgramResult {
+    return transferRaw(from.raw, to.raw, from.key(), to.key(), from.dataPtr(), to.dataPtr(), amount);
+}
+
+fn transferRaw(
+    from_raw: *sdk.Account,
+    to_raw: *sdk.Account,
+    from_key: *const sdk.Pubkey,
+    to_key: *const sdk.Pubkey,
+    from_data: [*]u8,
+    to_data: [*]u8,
+    amount: u64,
+) sdk.ProgramResult {
     var system_program_id: sdk.Pubkey = undefined;
     getSystemProgramId(&system_program_id);
 
     var ix_data: [12]u8 = undefined;
-
-    // instruction index = 2 (u32 LE)
     std.mem.writeInt(u32, ix_data[0..4], 2, .little);
-    // amount (u64 LE)
     std.mem.writeInt(u64, ix_data[4..12], amount, .little);
 
-    const account_metas = [_]sdk.AccountMeta{
-        .{ .pubkey = from.key(), .is_writable = true, .is_signer = true },
-        .{ .pubkey = to.key(), .is_writable = true, .is_signer = false },
+    const account_metas = [_]FastAccountMeta{
+        .{ .pubkey = from_key, .is_writable = true, .is_signer = true },
+        .{ .pubkey = to_key, .is_writable = true, .is_signer = false },
     };
 
-    const instruction = sdk.Instruction{
+    const instruction = FastInstruction{
         .program_id = &system_program_id,
         .accounts = &account_metas,
+        .account_len = account_metas.len,
         .data = &ix_data,
+        .data_len = ix_data.len,
     };
 
-    try sdk.invoke(&instruction, &[_]sdk.AccountInfo{ from, to });
+    const account_infos = [_]FastSolAccountInfo{
+        .{
+            .key = &from_raw.key,
+            .lamports = &from_raw.lamports,
+            .data_len = from_raw.data_len,
+            .data = from_data,
+            .owner = &from_raw.owner,
+            .rent_epoch = 0,
+            .is_signer = from_raw.is_signer != 0,
+            .is_writable = from_raw.is_writable != 0,
+            .executable = from_raw.executable != 0,
+        },
+        .{
+            .key = &to_raw.key,
+            .lamports = &to_raw.lamports,
+            .data_len = to_raw.data_len,
+            .data = to_data,
+            .owner = &to_raw.owner,
+            .rent_epoch = 0,
+            .is_signer = to_raw.is_signer != 0,
+            .is_writable = to_raw.is_writable != 0,
+            .executable = to_raw.executable != 0,
+        },
+    };
+
+    const empty_signers = FastSignerSeeds{ .addr = 0, .len = 0 };
+    const result = syscalls.sol_invoke_signed_c(
+        @as([*]const u8, @ptrCast(&instruction)),
+        @as([*]const u8, @ptrCast(&account_infos)),
+        account_infos.len,
+        @as([*]const u8, @ptrCast(&empty_signers)),
+        0,
+    );
+    if (result != errors.SUCCESS) {
+        return error.InvalidArgument;
+    }
 }
 
 /// Assign a new owner to an account via System Program CPI.

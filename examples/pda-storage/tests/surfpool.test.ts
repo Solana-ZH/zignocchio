@@ -10,6 +10,9 @@ import {
 import { execSync, spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { buildExampleProgram } from '../../../client/src/build';
+
+jest.setTimeout(180000);
 
 describe('PDA Storage Program', () => {
   let validator: ChildProcess;
@@ -28,7 +31,7 @@ describe('PDA Storage Program', () => {
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     console.log('Building pda-storage program...');
-    execSync('zig build -Dexample=pda-storage', { stdio: 'inherit' });
+    buildExampleProgram('pda-storage');
 
     const programKeypair = Keypair.generate();
     programId = programKeypair.publicKey;
@@ -100,7 +103,7 @@ describe('PDA Storage Program', () => {
     if (!programReady) {
       throw new Error('Program not executable');
     }
-  }, 60000);
+  }, 180000);
 
   afterAll(async () => {
     try {

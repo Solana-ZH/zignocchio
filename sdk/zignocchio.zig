@@ -66,6 +66,7 @@ pub const entrypoint = @import("entrypoint.zig");
 pub const allocator = @import("allocator.zig");
 pub const pda = @import("pda.zig");
 pub const cpi = @import("cpi.zig");
+pub const lazy = @import("lazy.zig");
 pub const token = @import("token/mod.zig");
 pub const guard = @import("guard.zig");
 pub const schema = @import("schema.zig");
@@ -118,6 +119,7 @@ pub const MAX_SEED_LEN = pda.MAX_SEED_LEN;
 pub const AccountMeta = cpi.AccountMeta;
 pub const Instruction = cpi.Instruction;
 pub const invoke = cpi.invoke;
+pub const LazyAccount = lazy.LazyAccount;
 pub const invokeSigned = cpi.invokeSigned;
 pub const setReturnData = cpi.setReturnData;
 pub const getReturnData = cpi.getReturnData;
@@ -135,4 +137,11 @@ pub fn createEntrypointWithMaxAccounts(
     comptime process_instruction: entrypoint.EntrypointFn,
 ) fn ([*]u8) callconv(.c) u64 {
     return entrypoint.entrypoint(max_accounts, process_instruction);
+}
+
+/// Create an experimental lazy/cursor-based entrypoint.
+pub fn createLazyEntrypoint(
+    comptime process_instruction: lazy.EntrypointFn,
+) fn ([*]u8) callconv(.c) u64 {
+    return lazy.entrypoint(process_instruction);
 }

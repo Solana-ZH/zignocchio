@@ -29,22 +29,15 @@ fn processInstruction(
     accounts: []sdk.AccountInfo,
     instruction_data: []const u8,
 ) sdk.ProgramResult {
-    sdk.logMsg("transfer-sol: starting");
-
-    // Parse instruction data
     if (instruction_data.len != 8) {
-        sdk.logMsg("transfer-sol: invalid instruction data length");
         return error.InvalidInstructionData;
     }
     const amount = std.mem.readInt(u64, instruction_data[0..8], .little);
     if (amount == 0) {
-        sdk.logMsg("transfer-sol: amount must be greater than 0");
         return error.InvalidInstructionData;
     }
 
-    // Validate accounts
     if (accounts.len < 3) {
-        sdk.logMsg("transfer-sol: not enough accounts");
         return error.NotEnoughAccountKeys;
     }
 
@@ -52,25 +45,16 @@ fn processInstruction(
     const to = accounts[1];
     const system_program = accounts[2];
 
-    // Security guards
     try guard.assert_signer(from);
     try guard.assert_writable(from);
     try guard.assert_writable(to);
 
-    // Verify system program
     var system_program_id: sdk.Pubkey = undefined;
     system.getSystemProgramId(&system_program_id);
     if (!sdk.pubkeyEq(system_program.key(), &system_program_id)) {
-        sdk.logMsg("transfer-sol: invalid system program");
         return error.IncorrectProgramId;
     }
 
-    sdk.logMsg("transfer-sol: transferring");
-    sdk.logU64(amount);
-
-    // Execute transfer via System Program CPI
     try system.transfer(from, to, amount);
-
-    sdk.logMsg("transfer-sol: success");
     return {};
 }

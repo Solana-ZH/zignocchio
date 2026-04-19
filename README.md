@@ -1,292 +1,161 @@
-# Solana BPF Programs with Zig
+# Zignocchio
 
-Build Solana programs in Zig using one of two back-ends:
+Build Solana programs in Zig with the `solana-zig` fork and a direct sBPF pipeline.
 
-| Backend | Compiler | Pipeline | Zig version | CU / size |
-|---------|----------|----------|-------------|-----------|
-| **`elf2sbpf`** (default) | stock Zig 0.16 | bitcode → bpfel → [elf2sbpf][e2] | any 0.16 | worse than baseline (no CU optimizer) |
-| **`fork-sbf`** (opt-in) | [solana-zig fork][fork] | direct `sbf-solana` native build | 0.16.0-dev.0+cf5f8113c | best (matches solana-zig v1.52 baseline) |
+## Status
 
-[e2]: https://github.com/DaviRain-Su/elf2sbpf
-[fork]: https://github.com/DaviRain-Su/solana-zig-bootstrap/tree/solana-1.52-zig0.16
+- **Primary build path:** direct `sbf-solana-none`
+- **Required compiler:** `solana-zig` fork
+- **Default artifact path:** `zig-out/lib/{example}.so`
+- **Default SBF CPU:** `baseline`
 
-Select with `-Dbackend=elf2sbpf` (default) or `-Dbackend=fork-sbf`.
-
-## Features
-
-- ✅ Uses standard Zig BPF target (no custom forks)
-- ✅ Zero external dependencies for the default (elf2sbpf) build
-- ✅ **Zignocchio SDK** - Full-featured Zig SDK for Solana
-- ✅ LLVM bitcode generation via `-femit-llvm-bc`
-- ✅ Direct syscall invocation via function pointers
-- ✅ Auto-generated syscall bindings with MurmurHash3
-- ✅ Automated build pipeline with `zig build`
-- ✅ Jest-based integration tests with solana-test-validator
+This repository no longer uses `elf2sbpf` or `sbpf-linker` as active build backends.
+Historical comparison data is kept in [`docs/backend-comparison.md`](docs/backend-comparison.md), and the current direct-SBF CU snapshot is summarized in [`docs/cu-summary.md`](docs/cu-summary.md).
 
 ## Prerequisites
 
-**elf2sbpf build pipeline (required):**
-
 ```bash
-# Install Zig 0.16.0 or later
-# (get it from https://ziglang.org/download/)
+# solana-zig fork binary
+export SOLANA_ZIG=/path/to/solana-zig-bootstrap/out/host/bin/zig
 
-# Install elf2sbpf (pure Zig, no Rust toolchain needed)
-git clone https://github.com/DaviRain-Su/elf2sbpf && cd elf2sbpf
-zig build -p ~/.local
-export PATH="$HOME/.local/bin:$PATH"
-cd ..
-
-# Or, if elf2sbpf is cloned next to this repo, use it in place:
-export PATH="$(cd ../elf2sbpf/zig-out/bin && pwd):$PATH"
-
-# Install Node.js for testing
+# Node.js for Jest / TS integration tests
+npm install
 ```
 
-That's it — no Rust toolchain, no `cargo install`, no `libLLVM.so`
-symlink, and no `LD_LIBRARY_PATH` juggling.
+You can also use `ZIG=/path/to/fork/zig` if you prefer.
 
 ## Building
 
 ```bash
-# Build an example
-zig build -Dexample=hello
+# Build the default example
+SOLANA_ZIG=/path/to/fork/zig bash tools/with-solana-zig.sh build
 
-# Point to a non-PATH elf2sbpf binary
-zig build -Dexample=hello -Delf2sbpf-bin=/path/to/elf2sbpf
+# Build a specific example directly with the fork compiler
+"$SOLANA_ZIG" build -Dexample=hello
 
-# If elf2sbpf is checked out in the parent directory
-zig build -Dexample=hello -Delf2sbpf-bin=../elf2sbpf/zig-out/bin/elf2sbpf
+# Or invoke through the helper so the fork is always selected
+SOLANA_ZIG=/path/to/fork/zig bash tools/with-solana-zig.sh build -Dexample=hello
 ```
 
-This generates:
-1. `entrypoint.bc` - LLVM bitcode from Zig source
-2. `zig-out/lib/{example}.o` - BPF ELF (elf2sbpf back-end only;
-   intermediate that `elf2sbpf` consumes)
-3. `zig-out/lib/{example}.so` - Final Solana program
+Examples currently included:
 
-## fork-sbf backend (opt-in)
+- `hello`
+- `counter`
+- `transfer-sol`
+- `pda-storage`
+- `vault`
+- `token-vault`
+- `escrow`
+- `noop`
+- `logonly`
 
-If you have the [solana-zig fork][fork] installed, pass
-`-Dbackend=fork-sbf` to the solana-zig fork Zig binary to skip the
-`zig cc` + `elf2sbpf` pipeline entirely. The fork's built-in LLVM SBF
-target produces `.so` in one step:
+## Build options
 
 ```bash
-SOLANA_ZIG=/path/to/solana-zig-bootstrap/out-smoke/host/bin/zig
-"$SOLANA_ZIG" build -Dexample=escrow -Dbackend=fork-sbf
+# Override SBF CPU model
+"$SOLANA_ZIG" build -Dexample=hello -Dsbf-cpu=baseline
+"$SOLANA_ZIG" build -Dexample=hello -Dsbf-cpu=v1
+"$SOLANA_ZIG" build -Dexample=hello -Dsbf-cpu=v2
 ```
 
-Optional `-Dsbf-cpu=generic|v1|v2|v3` (default `v2`) selects the SBF
-feature set. Note: `v2+` uses the SBF-specific opcode encoding
-(`mem_encoding`, `no_lddw`, etc.), which requires an Agave 4.x+ runtime
-with SBF feature gates enabled — the default `mollusk-svm 0.12.1-agave-4.0`
-loader in `tests_rust/` does not yet configure these, so fork-sbf output
-cannot currently be executed through the local mollusk integration tests.
-Rosetta (which uses `solana-program-test`) runs fork-sbf programs fine.
+Supported CPU values:
 
-### `.so` size comparison (bytes)
+- `baseline` (default)
+- `generic`
+- `v1`
+- `v2`
+- `v3`
 
-Measured on the 9 built-in examples:
-
-| example         | elf2sbpf | fork-sbf v2 |
-|-----------------|---------:|------------:|
-| hello           |    1 192 |       1 408 |
-| noop            |      304 |       1 128 |
-| logonly         |    1 184 |       1 408 |
-| counter         |    3 344 |       3 352 |
-| transfer-sol    |    4 384 |       3 760 |
-| pda-storage     |    8 728 |       5 920 |
-| vault           |   12 256 |       8 024 |
-| escrow          |   18 616 |       9 752 |
-| token-vault     |   20 496 |      10 720 |
-
-### CU consumption comparison (mollusk-svm)
-
-Per the integration tests in `tests_rust/examples/`, measured via
-`eprintln!("[CU] ...")` right after `mollusk.process_instruction`:
-
-| test                                       | elf2sbpf | fork-sbf v2 |
-|--------------------------------------------|---------:|------------:|
-| hello                                      |      107 |           * |
-| counter (increment)                        |      969 |           * |
-| escrow (make_and_accept)                   |    8 053 |           * |
-| escrow (make_and_refund)                   |   17 053 |           * |
-| escrow (accept_by_unauthorized)            |    8 053 |           * |
-| pda_storage (init_and_update)              |    4 730 |           * |
-| pda_storage (wrong_signer_fails)           |    6 230 |           * |
-| transfer_sol (happy)                       |    3 013 |           * |
-| vault (deposit_happy)                      |    6 669 |           * |
-
-`*` = fork-sbf programs cannot currently be loaded by mollusk-svm
-0.12.1-agave-4.0. The failure mode is `RelativeJumpOutOfBounds(3)` at
-verifier load time, independent of whether we use loader v3 or v4.
-The root cause is that Mollusk configures a single
-`program_runtime_environment_v1` (SBPF V0 feature set), while
-fork-sbf programs identify as SBPF v2 in their ELF headers and encode
-syscalls as inline `call <murmur3_hash>` rather than the V0 pattern of
-`call -0x1` + dynsym relocation. The rbpf 0.14.4 verifier under v1
-environment interprets the inline hash as an out-of-range local call.
-
-Unblocking this requires mollusk to route programs to a v2-specific
-runtime environment based on the ELF's SBPF version header — work that
-lives in mollusk itself, not in this repo. For now:
-
-- **Need to verify fork-sbf runs on-chain**: use
-  [solana-program-rosetta](https://github.com/DaviRain-Su/solana-program-rosetta)
-  which uses `solana-program-test` (full Agave SVM); all CU numbers
-  there match the `solana-zig` v1.52.0 baseline within ±0 CU.
-- **Want CU for a specific zignocchio example**: for now, build with
-  `-Dbackend=fork-sbf` and deploy to a local validator; mollusk
-  integration is blocked on upstream mollusk work.
-
-> An opt-in `--peephole` pass existed in earlier elf2sbpf and was
-> explored here for CU optimization. It was rolled back upstream
-> 2026-04-19 after exposing a miscompile on escrow's control flow
-> (`Access violation at 0xfffffffffffffe98`). The column is removed
-> from this README; the current elf2sbpf only offers the default
-> byte-equivalent path.
-
-### Key takeaways
-
-- **Trivially small programs** (`hello`, `noop`, `logonly`): fork-sbf's
-  `.so` is ~1.1 KB larger due to SBF v2 metadata floor.
-- **Medium programs** (`counter`, `transfer-sol`): roughly break-even
-  on size; CU mostly unchanged.
-- **Heavy Pubkey-manipulating programs** (`pda-storage`, `vault`,
-  `escrow`, `token-vault`): **fork-sbf wins 30–50 % on size** because
-  the SBF LLVM backend emits unaligned u64 loads/stores as single
-  instructions (`mem_encoding`) and folds syscalls via `static_syscalls`.
-- **For optimal CU, use the fork-sbf backend** — elf2sbpf is the
-  zero-dependency path for stock Zig users who can't install the fork.
+`v2+` requires a runtime with the corresponding SBF feature gates enabled.
+For maximum harness compatibility, this repo defaults to `baseline`.
 
 ## Testing
 
 ```bash
-npm install
-npm test
+# All direct-SBF CI checks
+SOLANA_ZIG=/path/to/fork/zig bash tools/ci-fork-sbf.sh
+
+# Individual groups
+npm run test:examples:litesvm
+npm run test:client
+npm run test:rust
+npm run test:agave
+npm run test:examples:surfpool
 ```
 
-Tests will:
-- Build the program
-- Start solana-test-validator
-- Deploy the program
-- Execute and verify "Hello world!" log output
+`tools/ci-fork-sbf.sh` runs:
 
-## How It Works
+- example builds
+- Zig unit tests
+- LiteSVM example tests
+- client tests
+- Rust Mollusk tests
+- Agave `program-test` tests
+- surfpool tests when available in `PATH`
 
-### 1. Auto-Generated Syscall Bindings
+## How the build works
 
-All Solana syscalls are auto-generated from definitions using MurmurHash3-32:
+The build is now a direct native SBF build:
+
+1. `build.zig` resolves `sbf-solana-none`
+2. the program is compiled with the fork Zig toolchain
+3. a custom `bpf.ld` linker script strips unsupported sections
+4. the final shared object is installed to `zig-out/lib/{example}.so`
+
+## Syscalls
+
+Syscalls are generated from [`tools/syscall_defs.zig`](tools/syscall_defs.zig) by [`tools/gen_syscalls.zig`](tools/gen_syscalls.zig).
+
+Important detail: generated bindings are now emitted as **`extern fn` syscall declarations**, not magic function-pointer hashes. The MurmurHash3 values are still kept in comments for reference, but the linker now emits Solana-compatible syscall relocations such as `sol_log_`.
+
+Generate bindings with:
 
 ```bash
-zig run tools/gen_syscalls.zig -- src/syscalls.zig
+zig run tools/gen_syscalls.zig -- sdk/syscalls.zig
 ```
-
-This creates function pointers for all syscalls:
-
-```zig
-const syscalls = @import("syscalls.zig");
-syscalls.log(&message);  // Calls sol_log_ with hash 0x207559bd
-```
-
-The hash `0x207559bd` is computed as `murmur3_32("sol_log_", 0)` and
-resolved by the Solana VM at runtime via `call -0x1`.
-
-### 2. Inline String Data
-
-To avoid back-end-specific rodata stripping quirks, string data is
-inlined as byte arrays:
-
-```zig
-const message = [_]u8{'H','e','l','l','o',' ','w','o','r','l','d','!'};
-```
-
-### 3. Build Pipeline
-
-Three stages, pure Zig + `elf2sbpf`:
-
-```bash
-# 1. Zig → LLVM bitcode
-zig build-lib -target bpfel-freestanding -femit-llvm-bc=entrypoint.bc
-
-# 2. zig cc → BPF ELF (LLVM honors Solana's 4KB stack)
-zig cc -target bpfel-freestanding -mcpu=v2 -O2 \
-       -mllvm -bpf-stack-size=4096 \
-       -c entrypoint.bc -o entrypoint.o
-
-# 3. elf2sbpf → Solana SBPF .so
-elf2sbpf entrypoint.o program.so
-```
-
 
 ## Zignocchio SDK
 
-This project includes **Zignocchio**, a zero-dependency SDK for building Solana programs in Zig, inspired by [Pinocchio](https://github.com/anza-xyz/pinocchio).
+This repo includes **Zignocchio**, a Zig SDK for Solana programs with:
 
-### Quick Example
+- zero-copy input deserialization
+- typed `AccountInfo` access
+- PDA helpers
+- CPI helpers
+- guard helpers
+- schema helpers
+- SPL Token helpers
 
-```zig
-const sdk = @import("sdk/zignocchio.zig");
+See:
 
-export fn entrypoint(input: [*]u8) u64 {
-    return @call(.always_inline, sdk.createEntrypoint(processInstruction), .{input});
-}
+- [`sdk/zignocchio.zig`](sdk/zignocchio.zig)
+- [`AGENTS.md`](AGENTS.md)
+- [`examples/`](examples/)
 
-fn processInstruction(
-    program_id: *const sdk.Pubkey,
-    accounts: []sdk.AccountInfo,
-    instruction_data: []const u8,
-) sdk.ProgramResult {
-    sdk.logMsg("Hello from Zignocchio!");
+## Historical backend/CU summary
 
-    const account = accounts[0];
-    var data = try account.tryBorrowMutData();
-    defer data.release();
+The old two-backend comparison is preserved for reference in [`docs/backend-comparison.md`](docs/backend-comparison.md).
+High-level takeaways from that work:
 
-    data.value[0] = 42;
+- inside this repo's old artifact comparison, **`fork-sbf` usually produced smaller `.so` files**
+- in the old comparison script, **`fork-sbf` was usually slightly faster to build**
+- in cross-project runtime tests (`solana-program-rosetta`), **direct SBF Zig generally beat Zig `sbpf-linker` on meaningful CU cases**
+- **Pinocchio/Rust was still strongest** on the tested `transfer-lamports` and `cpi` workloads
 
-    return .{};
-}
-```
+Those numbers were useful for deciding the build direction, but the repo now treats direct SBF as the mainline path.
 
-### SDK Features
+## Project structure
 
-- **Zero-copy input deserialization** - Direct memory access to Solana's input buffer
-- **RAII borrow tracking** - Safe mutable access with automatic cleanup
-- **Type-safe API** - Strong typing for all Solana primitives
-- **PDAs** - Program Derived Address functions
-- **CPI** - Cross-program invocation support
-- **Efficient** - Bit-packed borrow state, optimized syscalls
-
-See [`sdk/README.md`](sdk/README.md) for complete documentation and [`examples/`](examples/) for working programs.
-
-## Project Structure
-
-```
+```text
 .
-├── build.zig              # Automated elf2sbpf-based build pipeline
-├── build.zig.zon          # Zero dependencies
+├── build.zig              # Direct-SBF build pipeline
 ├── sdk/                   # Zignocchio SDK
-│   ├── zignocchio.zig     # Main SDK module
-│   ├── types.zig          # Core types (Pubkey, AccountInfo)
-│   ├── entrypoint.zig     # Input deserialization
-│   ├── syscalls.zig       # Auto-generated syscalls
-│   ├── pda.zig            # Program Derived Addresses
-│   ├── cpi.zig            # Cross-program invocation
-│   ├── allocator.zig      # BumpAllocator
-│   ├── log.zig            # Logging utilities
-│   └── errors.zig         # Error types
 ├── examples/              # Example programs
-│   ├── hello.zig          # Minimal example (default build target)
-│   ├── counter.zig        # Full-featured example
-│   ├── hello.test.ts      # Tests for hello program
-│   ├── counter.test.ts    # Tests for counter program
-│   └── README.md          # Examples documentation
-└── tools/
-    ├── murmur3.zig        # MurmurHash3-32 implementation
-    ├── syscall_defs.zig   # Syscall definitions
-    └── gen_syscalls.zig   # Syscall generator
+├── client/                # TS helpers and adapters
+├── tests_rust/            # Mollusk / CU probes
+├── tests_agave/           # Agave program-test coverage
+├── tools/                 # Build and codegen helpers
+└── docs/                  # Architecture and historical notes
 ```
 
 ## License

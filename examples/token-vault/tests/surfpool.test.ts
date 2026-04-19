@@ -18,6 +18,9 @@ import {
 import { execSync, spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { buildExampleProgram } from '../../../client/src/build';
+
+jest.setTimeout(180000);
 
 describe('Token Vault Program', () => {
   let validator: ChildProcess;
@@ -47,7 +50,7 @@ describe('Token Vault Program', () => {
 
     // Build the token-vault program
     console.log('Building token-vault program...');
-    execSync('zig build -Dexample=token-vault', { stdio: 'inherit' });
+    buildExampleProgram('token-vault');
 
     // Generate program keypair for deployment
     const programKeypair = Keypair.generate();
@@ -191,7 +194,7 @@ describe('Token Vault Program', () => {
     await sendAndConfirmTransaction(connection, initTx, [payer]);
 
     console.log('Vault token account initialized');
-  }, 60000);
+  }, 180000);
 
   afterAll(async () => {
     // Kill surfpool

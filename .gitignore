@@ -47,3 +47,7 @@ tests_rust/Cargo.lock
 
 # ai
 .pi
+
+# Rust / Cargo artifacts
+target/
+Cargo.lock

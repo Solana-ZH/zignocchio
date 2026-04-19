@@ -9,6 +9,9 @@ import {
 import { execSync, spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { buildExampleProgram } from '../../../client/src/build';
+
+jest.setTimeout(180000);
 
 describe('Hello World Program', () => {
   let validator: ChildProcess;
@@ -29,7 +32,7 @@ describe('Hello World Program', () => {
 
     // Build the hello program
     console.log('Building hello program...');
-    execSync('zig build -Dexample=hello', { stdio: 'inherit' });
+    buildExampleProgram('hello');
 
     // Generate program keypair for deployment
     const programKeypair = Keypair.generate();
@@ -130,7 +133,7 @@ describe('Hello World Program', () => {
     if (!programReady) {
       throw new Error('Program not executable');
     }
-  }, 60000); // 60 second timeout
+  }, 180000);
 
   afterAll(async () => {
     // Stop surfpool

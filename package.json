@@ -3,8 +3,14 @@
   "version": "1.0.0",
   "description": "Solana BPF program built with Zig",
   "scripts": {
+    "build": "bash tools/with-solana-zig.sh build",
     "test": "jest",
-    "build": "zig build"
+    "test:examples:litesvm": "jest examples --testPathIgnorePatterns='surfpool'",
+    "test:examples:surfpool": "jest examples --testPathPattern='surfpool'",
+    "test:client": "npm --prefix client test",
+    "test:rust": "cd tests_rust && cargo test",
+    "test:agave": "cd tests_agave && BPF_OUT_DIR=../zig-out/lib cargo test",
+    "ci:fork-sbf": "bash tools/ci-fork-sbf.sh"
   },
   "devDependencies": {
     "@solana/spl-token": "^0.4.14",

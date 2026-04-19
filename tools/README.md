@@ -6,23 +6,23 @@ This directory contains tools for generating Solana syscall bindings for Zig.
 
 - **murmur3.zig** - MurmurHash3-32 implementation (matches Solana's syscall hash function)
 - **syscall_defs.zig** - Syscall definitions with signatures
-- **gen_syscalls.zig** - Generator that creates `src/syscalls.zig`
+- **gen_syscalls.zig** - Generator that creates `sdk/syscalls.zig`
 
 ## Usage
 
 Generate the syscalls file:
 
 ```bash
-zig run tools/gen_syscalls.zig -- src/syscalls.zig
+zig run tools/gen_syscalls.zig -- sdk/syscalls.zig
 ```
 
-This creates `src/syscalls.zig` with all Solana syscalls as function pointers.
+This creates `sdk/syscalls.zig` with Solana syscalls declared as `extern fn` bindings.
 
 ## How It Works
 
-1. Each syscall name (e.g., `"sol_log_"`) is hashed with MurmurHash3-32 (seed=0)
-2. The hash becomes a magic constant (e.g., `0x207559bd`)
-3. At runtime, Solana VM resolves these via `call -0x1` instruction
+1. Each syscall definition is described in `syscall_defs.zig`
+2. The generator emits an `extern fn ... callconv(.c)` declaration for linker-compatible Solana syscall relocations
+3. The MurmurHash3-32 value is still computed and kept in comments for reference/debugging
 
 ## Testing
 
@@ -50,4 +50,4 @@ To add syscalls, edit `syscall_defs.zig` and add a new entry to the `syscalls` a
 },
 ```
 
-Then regenerate `src/syscalls.zig`.
+Then regenerate `sdk/syscalls.zig`.

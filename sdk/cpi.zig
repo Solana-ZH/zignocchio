@@ -85,28 +85,15 @@ pub fn invoke(
     return invokeSigned(instruction, accounts, &[_][]const u8{});
 }
 
-/// Invoke another program with program derived address signatures
-///
-/// # Arguments
-/// * `instruction` - The instruction to invoke
-/// * `accounts` - Account infos required by the instruction
-/// * `signers_seeds` - Seeds used to derive PDAs that should sign (array of seed arrays)
-///
-/// # Errors
-/// Returns error if the invocation fails
-pub fn invokeSigned(
+fn validateInstructionAccounts(
     instruction: *const Instruction,
     accounts: []const AccountInfo,
-    signers_seeds: []const []const u8,
 ) errors.ProgramResult {
-    // Validate that accounts in instruction match provided account infos
     for (instruction.accounts) |account_meta| {
         var found = false;
         for (accounts) |account_info| {
             if (types.pubkeyEq(account_meta.pubkey, account_info.key())) {
                 found = true;
-
-                // Check borrow state before CPI
                 if (account_meta.is_writable) {
                     try account_info.canBorrowMutData();
                 }
@@ -117,7 +104,17 @@ pub fn invokeSigned(
             return error.NotEnoughAccountKeys;
         }
     }
+}
 
+/// Invoke another program without re-validating instruction/account matching.
+///
+/// Use this only when the caller has already enforced signer/writable/key
+/// invariants for the provided account set.
+pub fn invokeSignedUnchecked(
+    instruction: *const Instruction,
+    accounts: []const AccountInfo,
+    signers_seeds: []const []const u8,
+) errors.ProgramResult {
     // Convert instruction to C ABI format
     const sol_instruction = SolInstruction{
         .program_id = instruction.program_id,
@@ -199,6 +196,24 @@ pub fn invokeSigned(
     if (result != errors.SUCCESS) {
         return error.InvalidArgument;
     }
+}
+
+/// Invoke another program with program derived address signatures
+///
+/// # Arguments
+/// * `instruction` - The instruction to invoke
+/// * `accounts` - Account infos required by the instruction
+/// * `signers_seeds` - Seeds used to derive PDAs that should sign (array of seed arrays)
+///
+/// # Errors
+/// Returns error if the invocation fails
+pub fn invokeSigned(
+    instruction: *const Instruction,
+    accounts: []const AccountInfo,
+    signers_seeds: []const []const u8,
+) errors.ProgramResult {
+    try validateInstructionAccounts(instruction, accounts);
+    return invokeSignedUnchecked(instruction, accounts, signers_seeds);
 }
 
 /// Set return data for this program

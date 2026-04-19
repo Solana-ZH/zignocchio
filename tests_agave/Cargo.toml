@@ -1,0 +1,95 @@
+[package]
+name = "zignocchio-agave-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+autobins = false
+autoexamples = false
+autotests = false
+
+[dependencies]
+# Agave 2.x stable line — avoids the beta.7 dep graph churn.
+solana-program-test = "=2.1.21"
+solana-sdk = "=2.1.21"
+spl-token = "=7.0.0"
+tokio = { version = "1", features = ["full"] }
+
+[[test]]
+name = "hello_agave"
+path = "examples/hello.rs"
+
+[[test]]
+name = "hello_lazy_agave"
+path = "examples/hello_lazy.rs"
+
+[[test]]
+name = "counter_agave"
+path = "examples/counter.rs"
+
+[[test]]
+name = "counter_lazy_agave"
+path = "examples/counter_lazy.rs"
+
+[[test]]
+name = "transfer_sol_agave"
+path = "examples/transfer_sol.rs"
+
+[[test]]
+name = "transfer_sol_lazy_agave"
+path = "examples/transfer_sol_lazy.rs"
+
+[[test]]
+name = "transfer_owned_agave"
+path = "examples/transfer_owned.rs"
+
+[[test]]
+name = "transfer_owned_lazy_agave"
+path = "examples/transfer_owned_lazy.rs"
+
+[[test]]
+name = "pda_storage_agave"
+path = "examples/pda_storage.rs"
+
+[[test]]
+name = "pda_storage_lazy_agave"
+path = "examples/pda_storage_lazy.rs"
+
+[[test]]
+name = "vault_agave"
+path = "examples/vault.rs"
+
+[[test]]
+name = "vault_lazy_agave"
+path = "examples/vault_lazy.rs"
+
+[[test]]
+name = "escrow_agave"
+path = "examples/escrow.rs"
+
+[[test]]
+name = "escrow_lazy_agave"
+path = "examples/escrow_lazy.rs"
+
+[[test]]
+name = "token_vault_agave"
+path = "examples/token_vault.rs"
+
+[[test]]
+name = "token_vault_lazy_agave"
+path = "examples/token_vault_lazy.rs"
+
+[[test]]
+name = "noop_agave"
+path = "examples/noop.rs"
+
+[[test]]
+name = "noop_lazy_agave"
+path = "examples/noop_lazy.rs"
+
+[[test]]
+name = "logonly_agave"
+path = "examples/logonly.rs"
+
+[[test]]
+name = "logonly_lazy_agave"
+path = "examples/logonly_lazy.rs"

@@ -16,9 +16,9 @@ import {
   PublicKey,
   TransactionInstruction,
 } from '@solana/web3.js';
-import { execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { buildExampleProgram, findProjectRoot } from './build';
 
 /**
  * Context object returned when starting a litesvm test environment.
@@ -40,6 +40,8 @@ export interface LitesvmDeployOptions {
   soBasePath?: string;
   /** If true, skips running `zig build` and assumes the .so already exists */
   skipBuild?: boolean;
+  /** Optional extra args passed to `zig build`, e.g. ['-Dsbf-cpu=v3'] */
+  buildArgs?: string[];
 }
 
 /**
@@ -56,20 +58,6 @@ export function startLitesvm(): LitesvmContext {
 }
 
 /**
- * Find the Zignocchio project root by looking for build.zig.
- */
-function findProjectRoot(): string {
-  let dir = __dirname;
-  while (dir !== path.parse(dir).root) {
-    if (fs.existsSync(path.join(dir, 'build.zig'))) {
-      return dir;
-    }
-    dir = path.dirname(dir);
-  }
-  throw new Error('Could not find Zignocchio project root (no build.zig found)');
-}
-
-/**
  * Build and deploy a compiled Zignocchio sBPF program to litesvm.
  *
  * @param svm - An active LiteSVM instance
@@ -83,9 +71,9 @@ export function deployProgramToLitesvm(
   const projectRoot = findProjectRoot();
 
   if (!opts.skipBuild) {
-    execSync(`zig build -Dexample=${opts.exampleName}`, {
-      stdio: 'inherit',
-      cwd: projectRoot,
+    buildExampleProgram(opts.exampleName, {
+      projectRoot,
+      extraArgs: opts.buildArgs,
     });
   }
 

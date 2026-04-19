@@ -63,7 +63,7 @@ sdk/zignocchio.zig (统一入口)
 ├── runtime/        (已完成)
 │   ├── types.zig        ── 核心类型：Pubkey, Account, AccountInfo, Ref/RefMut
 │   ├── entrypoint.zig   ── 零拷贝输入反序列化 + entrypoint 生成
-│   ├── syscalls.zig     ── 自动生成的 syscall 绑定（MurmurHash3）
+│   ├── syscalls.zig     ── 自动生成的 syscall extern 声明（保留 MurmurHash3 注释）
 │   ├── log.zig          ── 日志封装
 │   ├── pda.zig          ── PDA 推导（findProgramAddress, createProgramAddress）
 │   ├── cpi.zig          ── 跨程序调用（invoke, invokeSigned, return data）
@@ -108,7 +108,7 @@ sdk/zignocchio.zig (统一入口)
 |------|------|------|----------|
 | `types` | Solana 核心类型的内存精确映射、borrow 跟踪、RAII guard | 已完成 | 内存布局必须与 Solana C ABI 一致 |
 | `entrypoint` | 零拷贝反序列化输入 buffer，生成 C-callconv entrypoint | 已完成 | 不支持 aggregate return（sBPF 限制） |
-| `syscalls` | MurmurHash3 解析的 syscall 函数指针 | 已完成 | 常量哈希由 `tools/gen_syscalls.zig` 自动生成 |
+| `syscalls` | Solana-compatible syscall extern 声明 | 已完成 | 由 `tools/gen_syscalls.zig` 自动生成，保留 MurmurHash3 注释供参考 |
 | `log` | 日志、CU 监控封装 | 已完成 | 不分配堆内存 |
 | `pda` | PDA 推导与验证 | 已完成 | 输出参数模式（非返回值） |
 | `cpi` | 跨程序调用、return data | 已完成 | C-ABI 结构体字段顺序必须精确 |
@@ -231,21 +231,23 @@ pub const system = struct {
 ```
 Zig 源码 (examples/{name}/lib.zig)
       │
-      ├──► zig build-lib -target bpfel-freestanding -femit-llvm-bc=entrypoint.bc
-      │    (生成 LLVM bitcode)
+      ├──► solana-zig fork 解析 `sbf-solana-none`
       │
-      ├──► zig cc -target bpfel-freestanding -mcpu=v2 \
-      │        -mllvm -bpf-stack-size=4096 -c entrypoint.bc -o zig-out/lib/{example_name}.o
-      │    (生成 BPF ELF 目标文件)
+      ├──► `b.addLibrary(... linkage = .dynamic)`
+      │    (直接生成 sBPF ELF)
       │
-      └──► elf2sbpf zig-out/lib/{example_name}.o zig-out/lib/{example_name}.so
-           (转换为 Solana SBPF 程序)
+      ├──► 自定义 `bpf.ld` 丢弃不支持 section
+      │
+      └──► 安装到 `zig-out/lib/{example_name}.so`
 ```
 
 **构建约束**：
-- BPF target: `bpfel-freestanding`
-- Optimizer: `ReleaseSmall`（最小化 ELF 体积）
-- sBPF CPU: `v2`（无 32-bit jumps）
+- 需要 `solana-zig` fork（当前主线路径）
+- Target: `sbf-solana-none`
+- Optimizer: `ReleaseSmall`
+- 默认 sBPF CPU: `baseline`
+- 可选 CPU: `generic / v1 / v2 / v3`
+- `v2+` 需要对应 Agave/SBF feature gates
 - Stack size: 4096 bytes
 
 ---
@@ -296,8 +298,9 @@ Initial state: 0b_1111_1111
 - 不依赖 Rust crate
 - 不依赖 Node.js 运行时（仅测试基础设施使用）
 
-**构建时唯一外部工具**：
-- `elf2sbpf`：将 BPF ELF 目标文件转换为 Solana SBPF 程序的纯 Zig 工具
+**构建时外部工具**：
+- `solana-zig fork`：当前唯一主线编译器，用于 direct-SBF 构建
+- `sbpf-linker`：仅保留为历史对比结论，不再是当前项目主线依赖
 
 ---
 
