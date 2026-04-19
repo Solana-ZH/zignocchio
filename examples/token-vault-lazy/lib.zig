@@ -12,32 +12,51 @@ export fn entrypoint(input: [*]u8) u64 {
 fn processInstruction(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
     sdk.logMsg("Token Vault program: Starting");
 
-    var account_buffer: [10]sdk.AccountInfo = undefined;
-    const accounts = try sdk.lazy.collectAccountInfos(context, &account_buffer);
-    const instruction_data = context.instructionDataUnchecked();
-    const program_id = context.programIdUnchecked();
-
-    if (instruction_data.len == 0) {
-        sdk.logMsg("Error: Empty instruction data");
-        return error.InvalidInstructionData;
-    }
-
-    return switch (instruction_data[0]) {
-        deposit.DISCRIMINATOR => blk: {
-            sdk.logMsg("Token Vault: Routing to Deposit");
-            const data = if (instruction_data.len > 1) instruction_data[1..] else &[_]u8{};
-            break :blk deposit.process(program_id, accounts, data);
-        },
-        withdraw.DISCRIMINATOR => blk: {
-            sdk.logMsg("Token Vault: Routing to Withdraw");
-            break :blk withdraw.process(program_id, accounts);
-        },
-        initialize.DISCRIMINATOR => blk: {
+    return switch (context.remaining()) {
+        6 => blk: {
+            var accounts = [_]sdk.AccountInfo{
+                context.nextAccountUnchecked().assumeAccount().toAccountInfo(),
+                context.nextAccountUnchecked().assumeAccount().toAccountInfo(),
+                context.nextAccountUnchecked().assumeAccount().toAccountInfo(),
+                context.nextAccountUnchecked().assumeAccount().toAccountInfo(),
+                context.nextAccountUnchecked().assumeAccount().toAccountInfo(),
+                context.nextAccountUnchecked().assumeAccount().toAccountInfo(),
+            };
+            const instruction_data = context.instructionDataUnchecked();
+            const program_id = context.programIdUnchecked();
+            if (instruction_data.len == 0) return error.InvalidInstructionData;
+            if (instruction_data[0] != initialize.DISCRIMINATOR) return error.InvalidInstructionData;
             sdk.logMsg("Token Vault: Routing to Initialize");
-            break :blk initialize.process(program_id, accounts);
+            break :blk initialize.process(program_id, &accounts);
+        },
+        4 => blk: {
+            var accounts = [_]sdk.AccountInfo{
+                context.nextAccountUnchecked().assumeAccount().toAccountInfo(),
+                context.nextAccountUnchecked().assumeAccount().toAccountInfo(),
+                context.nextAccountUnchecked().assumeAccount().toAccountInfo(),
+                context.nextAccountUnchecked().assumeAccount().toAccountInfo(),
+            };
+            const instruction_data = context.instructionDataUnchecked();
+            const program_id = context.programIdUnchecked();
+            if (instruction_data.len == 0) return error.InvalidInstructionData;
+            break :blk switch (instruction_data[0]) {
+                deposit.DISCRIMINATOR => blk2: {
+                    sdk.logMsg("Token Vault: Routing to Deposit");
+                    const data = if (instruction_data.len > 1) instruction_data[1..] else &[_]u8{};
+                    break :blk2 deposit.process(program_id, &accounts, data);
+                },
+                withdraw.DISCRIMINATOR => blk2: {
+                    sdk.logMsg("Token Vault: Routing to Withdraw");
+                    break :blk2 withdraw.process(program_id, &accounts);
+                },
+                else => blk2: {
+                    sdk.logMsg("Error: Unknown instruction discriminator");
+                    break :blk2 error.InvalidInstructionData;
+                },
+            };
         },
         else => blk: {
-            sdk.logMsg("Error: Unknown instruction discriminator");
+            sdk.logMsg("Error: Empty instruction data");
             break :blk error.InvalidInstructionData;
         },
     };

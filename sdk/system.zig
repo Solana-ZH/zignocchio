@@ -34,7 +34,12 @@ const FastSolAccountInfo = extern struct {
     executable: bool,
 };
 
-const FastSignerSeeds = extern struct {
+const FastSignerSeed = extern struct {
+    addr: u64,
+    len: u64,
+};
+
+const FastSignerSeedGroup = extern struct {
     addr: u64,
     len: u64,
 };
@@ -111,33 +116,41 @@ pub fn createAccountSigned(
     lamports: u64,
     signers_seeds: []const []const u8,
 ) sdk.ProgramResult {
-    var system_program_id: sdk.Pubkey = undefined;
-    getSystemProgramId(&system_program_id);
+    return createAccountSignedRaw(
+        payer.raw,
+        new_account.raw,
+        payer.key(),
+        new_account.key(),
+        payer.dataPtr(),
+        new_account.dataPtr(),
+        owner,
+        space,
+        lamports,
+        signers_seeds,
+    );
+}
 
-    var ix_data: [52]u8 = undefined;
-    @memset(&ix_data, 0);
-
-    // instruction index = 0 (u32 LE)
-    std.mem.writeInt(u32, ix_data[0..4], 0, .little);
-    // lamports (u64 LE)
-    std.mem.writeInt(u64, ix_data[4..12], lamports, .little);
-    // space (u64 LE)
-    std.mem.writeInt(u64, ix_data[12..20], space, .little);
-    // owner (Pubkey, 32 bytes)
-    @memcpy(ix_data[20..52], owner[0..32]);
-
-    const account_metas = [_]sdk.AccountMeta{
-        .{ .pubkey = payer.key(), .is_signer = true, .is_writable = true },
-        .{ .pubkey = new_account.key(), .is_signer = true, .is_writable = true },
-    };
-
-    const instruction = sdk.Instruction{
-        .program_id = &system_program_id,
-        .accounts = &account_metas,
-        .data = &ix_data,
-    };
-
-    try sdk.invokeSigned(&instruction, &[_]sdk.AccountInfo{ payer, new_account }, signers_seeds);
+/// Create a new account via System Program CPI with PDA signing using lazy account wrappers.
+pub fn createAccountSignedLazy(
+    payer: sdk.LazyAccount,
+    new_account: sdk.LazyAccount,
+    owner: *const sdk.Pubkey,
+    space: u64,
+    lamports: u64,
+    signers_seeds: []const []const u8,
+) sdk.ProgramResult {
+    return createAccountSignedRaw(
+        payer.raw,
+        new_account.raw,
+        payer.key(),
+        new_account.key(),
+        payer.dataPtr(),
+        new_account.dataPtr(),
+        owner,
+        space,
+        lamports,
+        signers_seeds,
+    );
 }
 
 /// Transfer lamports via System Program CPI.
@@ -153,7 +166,7 @@ pub fn transfer(
     to: sdk.AccountInfo,
     amount: u64,
 ) sdk.ProgramResult {
-    return transferRaw(from.raw, to.raw, from.key(), to.key(), from.dataPtr(), to.dataPtr(), amount);
+    return transferRaw(from.raw, to.raw, from.key(), to.key(), from.dataPtr(), to.dataPtr(), amount, &[_][]const u8{}, true);
 }
 
 /// Transfer lamports via System Program CPI using lazy account wrappers.
@@ -162,7 +175,17 @@ pub fn transferLazy(
     to: sdk.LazyAccount,
     amount: u64,
 ) sdk.ProgramResult {
-    return transferRaw(from.raw, to.raw, from.key(), to.key(), from.dataPtr(), to.dataPtr(), amount);
+    return transferRaw(from.raw, to.raw, from.key(), to.key(), from.dataPtr(), to.dataPtr(), amount, &[_][]const u8{}, true);
+}
+
+/// Transfer lamports from a PDA signer via System Program CPI using lazy account wrappers.
+pub fn transferSignedLazy(
+    from: sdk.LazyAccount,
+    to: sdk.LazyAccount,
+    amount: u64,
+    signers_seeds: []const []const u8,
+) sdk.ProgramResult {
+    return transferRaw(from.raw, to.raw, from.key(), to.key(), from.dataPtr(), to.dataPtr(), amount, signers_seeds, true);
 }
 
 fn transferRaw(
@@ -173,6 +196,8 @@ fn transferRaw(
     from_data: [*]u8,
     to_data: [*]u8,
     amount: u64,
+    signers_seeds: []const []const u8,
+    from_is_signer: bool,
 ) sdk.ProgramResult {
     var system_program_id: sdk.Pubkey = undefined;
     getSystemProgramId(&system_program_id);
@@ -182,7 +207,7 @@ fn transferRaw(
     std.mem.writeInt(u64, ix_data[4..12], amount, .little);
 
     const account_metas = [_]FastAccountMeta{
-        .{ .pubkey = from_key, .is_writable = true, .is_signer = true },
+        .{ .pubkey = from_key, .is_writable = true, .is_signer = from_is_signer },
         .{ .pubkey = to_key, .is_writable = true, .is_signer = false },
     };
 
@@ -219,17 +244,106 @@ fn transferRaw(
         },
     };
 
-    const empty_signers = FastSignerSeeds{ .addr = 0, .len = 0 };
-    const result = syscalls.sol_invoke_signed_c(
-        @as([*]const u8, @ptrCast(&instruction)),
-        @as([*]const u8, @ptrCast(&account_infos)),
-        account_infos.len,
-        @as([*]const u8, @ptrCast(&empty_signers)),
-        0,
-    );
-    if (result != errors.SUCCESS) {
-        return error.InvalidArgument;
+    try invokeRaw(&instruction, &account_infos, signers_seeds);
+}
+
+fn createAccountSignedRaw(
+    payer_raw: *sdk.Account,
+    new_account_raw: *sdk.Account,
+    payer_key: *const sdk.Pubkey,
+    new_account_key: *const sdk.Pubkey,
+    payer_data: [*]u8,
+    new_account_data: [*]u8,
+    owner: *const sdk.Pubkey,
+    space: u64,
+    lamports: u64,
+    signers_seeds: []const []const u8,
+) sdk.ProgramResult {
+    var system_program_id: sdk.Pubkey = undefined;
+    getSystemProgramId(&system_program_id);
+
+    var ix_data: [52]u8 = undefined;
+    @memset(&ix_data, 0);
+    std.mem.writeInt(u32, ix_data[0..4], 0, .little);
+    std.mem.writeInt(u64, ix_data[4..12], lamports, .little);
+    std.mem.writeInt(u64, ix_data[12..20], space, .little);
+    @memcpy(ix_data[20..52], owner[0..32]);
+
+    const account_metas = [_]FastAccountMeta{
+        .{ .pubkey = payer_key, .is_writable = true, .is_signer = true },
+        .{ .pubkey = new_account_key, .is_writable = true, .is_signer = true },
+    };
+
+    const instruction = FastInstruction{
+        .program_id = &system_program_id,
+        .accounts = &account_metas,
+        .account_len = account_metas.len,
+        .data = &ix_data,
+        .data_len = ix_data.len,
+    };
+
+    const account_infos = [_]FastSolAccountInfo{
+        .{
+            .key = &payer_raw.key,
+            .lamports = &payer_raw.lamports,
+            .data_len = payer_raw.data_len,
+            .data = payer_data,
+            .owner = &payer_raw.owner,
+            .rent_epoch = 0,
+            .is_signer = payer_raw.is_signer != 0,
+            .is_writable = payer_raw.is_writable != 0,
+            .executable = payer_raw.executable != 0,
+        },
+        .{
+            .key = &new_account_raw.key,
+            .lamports = &new_account_raw.lamports,
+            .data_len = new_account_raw.data_len,
+            .data = new_account_data,
+            .owner = &new_account_raw.owner,
+            .rent_epoch = 0,
+            .is_signer = new_account_raw.is_signer != 0,
+            .is_writable = new_account_raw.is_writable != 0,
+            .executable = new_account_raw.executable != 0,
+        },
+    };
+
+    try invokeRaw(&instruction, &account_infos, signers_seeds);
+}
+
+fn invokeRaw(
+    instruction: *const FastInstruction,
+    account_infos: []const FastSolAccountInfo,
+    signers_seeds: []const []const u8,
+) sdk.ProgramResult {
+    if (signers_seeds.len == 0) {
+        const empty_signers = FastSignerSeedGroup{ .addr = 0, .len = 0 };
+        const result = syscalls.sol_invoke_signed_c(
+            @as([*]const u8, @ptrCast(instruction)),
+            @as([*]const u8, @ptrCast(account_infos.ptr)),
+            account_infos.len,
+            @as([*]const u8, @ptrCast(&empty_signers)),
+            0,
+        );
+        if (result != errors.SUCCESS) return error.InvalidArgument;
+        return {};
     }
+
+    var sol_signer_seeds: [4]FastSignerSeed = undefined;
+    var sol_signers: [1]FastSignerSeedGroup = undefined;
+    if (signers_seeds.len > sol_signer_seeds.len) return error.InvalidArgument;
+    for (signers_seeds, 0..) |seed, i| {
+        sol_signer_seeds[i] = .{ .addr = @intFromPtr(seed.ptr), .len = seed.len };
+    }
+    sol_signers[0] = .{ .addr = @intFromPtr(&sol_signer_seeds), .len = signers_seeds.len };
+
+    const result = syscalls.sol_invoke_signed_c(
+        @as([*]const u8, @ptrCast(instruction)),
+        @as([*]const u8, @ptrCast(account_infos.ptr)),
+        account_infos.len,
+        @as([*]const u8, @ptrCast(&sol_signers)),
+        1,
+    );
+    if (result != errors.SUCCESS) return error.InvalidArgument;
 }
 
 /// Assign a new owner to an account via System Program CPI.

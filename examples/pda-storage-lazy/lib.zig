@@ -1,7 +1,6 @@
 //! PDA Storage - lazy entrypoint experiment.
 
 const sdk = @import("sdk");
-const std = @import("std");
 
 const DISCRIMINATOR_INIT = 0;
 const DISCRIMINATOR_UPDATE = 1;
@@ -18,27 +17,18 @@ fn processInstruction(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
         4 => try initStorage(context),
         2 => try updateStorage(context),
         else => blk: {
-            const instruction_data = context.peekInstructionDataUnchecked();
-            if (instruction_data.len < 1) {
-                sdk.logMsg("Error: Missing discriminator");
-            } else {
-                sdk.logMsg("Error: Unknown discriminator");
-            }
+            sdk.logMsg("Error: Invalid account layout");
             break :blk error.InvalidInstructionData;
         },
     };
 }
 
 fn initStorage(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
-    if (context.remaining() < 4) {
-        sdk.logMsg("Error: Not enough accounts for init");
-        return error.NotEnoughAccountKeys;
-    }
 
     const payer = context.nextAccountUnchecked().assumeAccount();
     const storage_pda = context.nextAccountUnchecked().assumeAccount();
     const user = context.nextAccountUnchecked().assumeAccount();
-    const system_program = context.nextAccountUnchecked().assumeAccount();
+    _ = context.nextAccountUnchecked();
     const instruction_data = context.instructionDataUnchecked();
     const program_id = context.programIdUnchecked();
 
@@ -47,17 +37,11 @@ fn initStorage(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
     if (!payer.isWritable()) return error.ImmutableAccount;
     if (!storage_pda.isWritable()) return error.ImmutableAccount;
 
-    var system_program_id: sdk.Pubkey = undefined;
-    sdk.system.getSystemProgramId(&system_program_id);
-    if (!sdk.pubkeyEq(system_program.key(), &system_program_id)) {
-        return error.IncorrectProgramId;
-    }
-
-    if (instruction_data.len < 9 or instruction_data[0] != DISCRIMINATOR_INIT) {
+    if (instruction_data.len < 9) {
         sdk.logMsg("Error: Instruction data too short for init");
         return error.InvalidInstructionData;
     }
-    const initial_value = std.mem.readInt(u64, instruction_data[1..9], .little);
+    const initial_value = @as(*align(1) const u64, @ptrCast(instruction_data.ptr + 1)).*;
 
     const seeds = &[_][]const u8{ STORAGE_SEED, user.key()[0..32] };
     var expected_pda: sdk.Pubkey = undefined;
@@ -69,9 +53,9 @@ fn initStorage(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
     }
 
     const signer_seeds = &[_][]const u8{ STORAGE_SEED, user.key()[0..32], &[_]u8{bump} };
-    try sdk.system.createAccountSigned(
-        payer.toAccountInfo(),
-        storage_pda.toAccountInfo(),
+    try sdk.system.createAccountSignedLazy(
+        payer,
+        storage_pda,
         program_id,
         40,
         1_200_000,
@@ -84,7 +68,7 @@ fn initStorage(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
         return error.AccountDataTooSmall;
     }
     @memcpy(data[0..32], user.key()[0..32]);
-    std.mem.writeInt(u64, data[32..40], initial_value, .little);
+    @as(*align(1) u64, @ptrCast(data.ptr + 32)).* = initial_value;
 
     sdk.logMsg("PDA Storage: initialized with value");
     sdk.logU64(initial_value);
@@ -92,10 +76,6 @@ fn initStorage(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
 }
 
 fn updateStorage(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
-    if (context.remaining() < 2) {
-        sdk.logMsg("Error: Not enough accounts for update");
-        return error.NotEnoughAccountKeys;
-    }
 
     const storage_pda = context.nextAccountUnchecked().assumeAccount();
     const user = context.nextAccountUnchecked().assumeAccount();
@@ -105,11 +85,11 @@ fn updateStorage(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
     if (!user.isSigner()) return error.MissingRequiredSignature;
     if (!storage_pda.isWritable()) return error.ImmutableAccount;
 
-    if (instruction_data.len < 9 or instruction_data[0] != DISCRIMINATOR_UPDATE) {
+    if (instruction_data.len < 9) {
         sdk.logMsg("Error: Instruction data too short for update");
         return error.InvalidInstructionData;
     }
-    const new_value = std.mem.readInt(u64, instruction_data[1..9], .little);
+    const new_value = @as(*align(1) const u64, @ptrCast(instruction_data.ptr + 1)).*;
 
     const seeds = &[_][]const u8{ STORAGE_SEED, user.key()[0..32] };
     var expected_pda: sdk.Pubkey = undefined;
@@ -129,7 +109,7 @@ fn updateStorage(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
         sdk.logMsg("Error: User does not own this storage");
         return error.IllegalOwner;
     }
-    std.mem.writeInt(u64, data[32..40], new_value, .little);
+    @as(*align(1) u64, @ptrCast(data.ptr + 32)).* = new_value;
 
     sdk.logMsg("PDA Storage: updated to value");
     sdk.logU64(new_value);
