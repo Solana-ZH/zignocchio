@@ -10,7 +10,7 @@ Build Solana programs in Zig with the `solana-zig` fork and a direct sBPF pipeli
 - **Default SBF CPU:** `baseline`
 
 This repository no longer uses `elf2sbpf` or `sbpf-linker` as active build backends.
-Historical comparison data is kept in [`docs/backend-comparison.md`](docs/backend-comparison.md), and the current direct-SBF CU snapshot is summarized in [`docs/cu-summary.md`](docs/cu-summary.md).
+Historical comparison data is kept in [`docs/backend-comparison.md`](docs/backend-comparison.md), the current direct-SBF CU snapshot is summarized in [`docs/cu-summary.md`](docs/cu-summary.md), and a Pinocchio parity / gap analysis is tracked in [`docs/pinocchio-gap-analysis.md`](docs/pinocchio-gap-analysis.md).
 
 ## Prerequisites
 
