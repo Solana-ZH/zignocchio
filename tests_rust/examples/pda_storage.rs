@@ -97,6 +97,7 @@ fn test_pda_storage_init_and_update() {
             keyed_account_for_system_program(),
         ],
     );
+    eprintln!("[CU] {}:{} {} CU", file!(), line!(), result.compute_units_consumed);
 
     assert!(
         !result.program_result.is_err(),
@@ -193,6 +194,7 @@ fn test_pda_storage_update_with_wrong_signer_fails() {
             keyed_account_for_system_program(),
         ],
     );
+    eprintln!("[CU] {}:{} {} CU", file!(), line!(), result.compute_units_consumed);
     assert!(!result.program_result.is_err());
 
     // Attempt update with attacker as signer

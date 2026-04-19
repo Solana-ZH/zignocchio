@@ -72,6 +72,7 @@ fn test_transfer_sol_happy() {
             keyed_account_for_system_program(),
         ],
     );
+    eprintln!("[CU] {}:{} {} CU", file!(), line!(), result.compute_units_consumed);
 
     assert!(
         !result.program_result.is_err(),

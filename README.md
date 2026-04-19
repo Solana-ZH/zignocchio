@@ -101,19 +101,53 @@ Measured on the 9 built-in examples, with elf2sbpf v0.1.0+D.7.10:
 | escrow          |   18 616 |                18 064 |       9 752 |
 | token-vault     |   20 496 |                20 272 |      10 720 |
 
-Observations:
+### CU consumption comparison (mollusk-svm)
 
-- Trivially small programs (`hello`, `noop`, `logonly`): fork-sbf is
-  **larger** because SBF v2's section layout and padding has more fixed
-  overhead than raw eBPF. For micro programs this floor (~1.1 KB)
-  dominates.
-- Medium (`counter`, `transfer-sol`): roughly break-even.
-- Heavy Pubkey-comparing programs (`pda-storage`, `vault`, `escrow`,
-  `token-vault`): **fork-sbf wins 30–50 %** because the SBF LLVM
-  backend emits single-instruction unaligned u64 loads/stores
-  (`mem_encoding`) instead of byte-wise expansions, and uses
-  `static_syscalls` to fold away relocations. elf2sbpf's `--peephole`
-  recovers the byte-wise loads but has no equivalent for the rest.
+Per the integration tests in `tests_rust/examples/`, measured via
+`eprintln!("[CU] ...")` right after `mollusk.process_instruction`:
+
+| test                                       | elf2sbpf | elf2sbpf `--peephole` | fork-sbf v2 |
+|--------------------------------------------|---------:|----------------------:|------------:|
+| hello                                      |      107 |                   107 |           * |
+| counter (increment)                        |      969 |                   969 |           * |
+| escrow (make_and_accept)                   |    8 053 |               **FAIL** |           * |
+| escrow (make_and_refund)                   |   17 053 |               **FAIL** |           * |
+| escrow (accept_by_unauthorized)            |    8 053 |               **FAIL** |           * |
+| pda_storage (init_and_update)              |    4 730 |                 4 730 |           * |
+| pda_storage (wrong_signer_fails)           |    6 230 |                 6 230 |           * |
+| transfer_sol (happy)                       |    3 013 |                 2 992 |           * |
+| vault (deposit_happy)                      |    6 669 |                 6 669 |           * |
+
+`*` = fork-sbf programs cannot currently be loaded by mollusk-svm
+0.12.1-agave-4.0's default `BPFLoaderUpgradeable` — SBF v2 opcodes
+fail verification (`RelativeJumpOutOfBounds`). Solana-program-rosetta's
+`solana-program-test` harness does load them successfully; see that
+repo's README for fork-sbf CU numbers (they match the `solana-zig`
+official v1.52.0 baseline within ±0 CU).
+
+**Note on peephole regression**: the `elf2sbpf --peephole` pass (D.7.10
+V2.1/V2.2) miscompiles escrow's control flow — all three escrow
+integration tests fail with `Access violation in unknown section at
+address 0xfffffffffffffe98`. This is a real bug in the peephole
+rewriter on patterns that the existing 9 rosetta programs didn't
+exercise. Tracked upstream at
+[DaviRain-Su/elf2sbpf](https://github.com/DaviRain-Su/elf2sbpf). The
+default elf2sbpf path (no `--peephole`) is unaffected.
+
+### Key takeaways
+
+- **Trivially small programs** (`hello`, `noop`, `logonly`): fork-sbf's
+  `.so` is ~1.1 KB larger due to SBF v2 metadata floor.
+- **Medium programs** (`counter`, `transfer-sol`): roughly break-even
+  on size; CU mostly unchanged.
+- **Heavy Pubkey-manipulating programs** (`pda-storage`, `vault`,
+  `escrow`, `token-vault`): **fork-sbf wins 30–50 % on size** because
+  the SBF LLVM backend emits unaligned u64 loads/stores as single
+  instructions (`mem_encoding`) and folds syscalls via
+  `static_syscalls`. elf2sbpf's `--peephole` recovers some of the
+  byte-wise loads but has no equivalent for the rest.
+- **Peephole has a known miscompile on escrow** — prefer the default
+  elf2sbpf path until that is fixed.
 
 ## Testing
 

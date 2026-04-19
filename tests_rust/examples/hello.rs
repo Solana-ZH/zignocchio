@@ -45,6 +45,7 @@ fn test_hello_executes_successfully() {
     };
 
     let result = mollusk.process_instruction(&ix, &[]);
+    eprintln!("[CU] {}:{} {} CU", file!(), line!(), result.compute_units_consumed);
     assert!(
         !result.program_result.is_err(),
         "hello should succeed: {:?}",
