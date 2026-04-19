@@ -119,11 +119,26 @@ Per the integration tests in `tests_rust/examples/`, measured via
 | vault (deposit_happy)                      |    6 669 |           * |
 
 `*` = fork-sbf programs cannot currently be loaded by mollusk-svm
-0.12.1-agave-4.0's default `BPFLoaderUpgradeable` — SBF v2 opcodes
-fail verification (`RelativeJumpOutOfBounds`). Solana-program-rosetta's
-`solana-program-test` harness does load them successfully; see that
-repo's README for fork-sbf CU numbers (they match the `solana-zig`
-official v1.52.0 baseline within ±0 CU).
+0.12.1-agave-4.0. The failure mode is `RelativeJumpOutOfBounds(3)` at
+verifier load time, independent of whether we use loader v3 or v4.
+The root cause is that Mollusk configures a single
+`program_runtime_environment_v1` (SBPF V0 feature set), while
+fork-sbf programs identify as SBPF v2 in their ELF headers and encode
+syscalls as inline `call <murmur3_hash>` rather than the V0 pattern of
+`call -0x1` + dynsym relocation. The rbpf 0.14.4 verifier under v1
+environment interprets the inline hash as an out-of-range local call.
+
+Unblocking this requires mollusk to route programs to a v2-specific
+runtime environment based on the ELF's SBPF version header — work that
+lives in mollusk itself, not in this repo. For now:
+
+- **Need to verify fork-sbf runs on-chain**: use
+  [solana-program-rosetta](https://github.com/DaviRain-Su/solana-program-rosetta)
+  which uses `solana-program-test` (full Agave SVM); all CU numbers
+  there match the `solana-zig` v1.52.0 baseline within ±0 CU.
+- **Want CU for a specific zignocchio example**: for now, build with
+  `-Dbackend=fork-sbf` and deploy to a local validator; mollusk
+  integration is blocked on upstream mollusk work.
 
 > An opt-in `--peephole` pass existed in earlier elf2sbpf and was
 > explored here for CU optimization. It was rolled back upstream
