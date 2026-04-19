@@ -42,8 +42,11 @@ Thumbs.db
 temp_example.zig
 
 # Rust test harness
+# These targets can become enormous; never commit them.
 tests_rust/target/
 tests_rust/Cargo.lock
+tests_agave/target/
+tests_agave/Cargo.lock
 
 # ai
 .pi
