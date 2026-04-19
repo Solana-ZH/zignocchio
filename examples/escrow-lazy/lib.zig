@@ -13,9 +13,25 @@ const EscrowState = extern struct {
     discriminator: u8,
     maker: sdk.Pubkey,
     taker: sdk.Pubkey,
+    bump: u8,
     amount: u64,
 };
 
+fn verifyEscrowPda(
+    escrow_key: *const sdk.Pubkey,
+    maker_key: *const sdk.Pubkey,
+    bump: u8,
+    program_id: *const sdk.Pubkey,
+) sdk.ProgramResult {
+    var expected_escrow: sdk.Pubkey = undefined;
+    const bump_seed = [_]u8{bump};
+    const seeds = &[_][]const u8{ "escrow", maker_key[0..32], bump_seed[0..] };
+    try sdk.createProgramAddress(seeds, program_id, &expected_escrow);
+    if (!sdk.pubkeyEq(escrow_key, &expected_escrow)) {
+        sdk.logMsg("Error: Invalid escrow PDA");
+        return error.IncorrectProgramId;
+    }
+}
 
 export fn entrypoint(input: [*]u8) u64 {
     return @call(.always_inline, sdk.createLazyEntrypoint(processInstruction), .{input});
@@ -132,6 +148,7 @@ fn processMake(
     state.discriminator = EscrowState.DISCRIMINATOR;
     state.maker = maker_key;
     state.taker = taker;
+    state.bump = bump;
     state.amount = amount;
 
     sdk.logMsg("Make: Escrow initialized successfully");
@@ -158,6 +175,7 @@ fn processAccept(
         sdk.logMsg("Error: Maker mismatch");
         return error.IncorrectProgramId;
     }
+    try verifyEscrowPda(escrow.key(), &state.maker, state.bump, program_id);
 
     const zero_pubkey: sdk.Pubkey = .{0} ** 32;
     if (!sdk.pubkeyEq(&state.taker, &zero_pubkey) and !sdk.pubkeyEq(taker.key(), &state.taker)) {
@@ -200,17 +218,12 @@ fn processRefund(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
     if (escrow_data.len < @sizeOf(EscrowState)) return error.AccountDataTooSmall;
     if (escrow_data[0] != EscrowState.DISCRIMINATOR) return error.InvalidAccountData;
 
-    const maker_key = maker.key().*;
-    const seeds = &[_][]const u8{ "escrow", &maker_key };
-    var expected_escrow: sdk.Pubkey = undefined;
-    var bump: u8 = undefined;
-    try sdk.findProgramAddress(seeds, program_id, &expected_escrow, &bump);
-    if (!sdk.pubkeyEq(escrow.key(), &expected_escrow)) {
-        sdk.logMsg("Error: Invalid escrow PDA");
+    const state = @as(*EscrowState, @ptrCast(@alignCast(escrow_data.ptr)));
+    if (!sdk.pubkeyEq(maker.key(), &state.maker)) {
+        sdk.logMsg("Error: Maker mismatch");
         return error.IncorrectProgramId;
     }
-
-    const state = @as(*EscrowState, @ptrCast(@alignCast(escrow_data.ptr)));
+    try verifyEscrowPda(escrow.key(), &state.maker, state.bump, program_id);
     sdk.logMsg("Refund: Validated accounts");
     sdk.logMsg("Refund amount:");
     sdk.logU64(state.amount);

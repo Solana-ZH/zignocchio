@@ -13,17 +13,16 @@ concurrency:
 
 env:
   ZIG_VERSION: "0.16.0"
-  # sbpf-linker published version; pin to keep CI reproducible.
-  SBPF_LINKER_VERSION: "0.1.8"
 
 jobs:
   # -------------------------------------------------------------------
-  # Default backend (sbpf-linker) — build + all tests. The one source
-  # of truth for "does the repo still work". Mirrors
-  # `npm run ci:sbpf-linker`.
+  # Fast checks that work on stock Zig in public GitHub Actions.
+  # The repository mainline is direct-SBF via the solana-zig fork, but
+  # those full integration checks still require a fork binary that is
+  # not yet published for CI consumption.
   # -------------------------------------------------------------------
-  ci-sbpf-linker:
-    name: ci-sbpf-linker (${{ matrix.os }})
+  host-checks:
+    name: host-checks (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -37,57 +36,17 @@ jobs:
         with:
           version: ${{ env.ZIG_VERSION }}
 
-      - name: Set up Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo registry + git
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('tests_rust/Cargo.lock', 'tests_agave/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Install LLVM (ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y llvm-18-dev
-          echo "LD_LIBRARY_PATH=/usr/lib/llvm-18/lib:${LD_LIBRARY_PATH:-}" >> $GITHUB_ENV
-
-      - name: Install LLVM (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew update
-          brew install llvm
-          BREW_LLVM_LIB="$(brew --prefix llvm)/lib"
-          echo "DYLD_FALLBACK_LIBRARY_PATH=${BREW_LLVM_LIB}" >> $GITHUB_ENV
-
-      - name: Install sbpf-linker
-        run: cargo install sbpf-linker --version ${{ env.SBPF_LINKER_VERSION }} --locked
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: npm install
-        run: npm install --no-audit --no-fund
-
-      - name: Run full CI (ci:sbpf-linker)
-        run: npm run ci:sbpf-linker
+      - name: Run Zig unit tests
+        run: zig build test -Dskip-program-build=true
 
   # -------------------------------------------------------------------
-  # Fork-sbf backend smoke — exists to keep the alternative build path
-  # working, but does NOT run tests (the fork Zig binary is large and
-  # we don't bake it into CI caches yet). Skipped on PRs; runs on push
-  # to main + manual dispatch.
+  # Direct-SBF / fork-Zig placeholder. Full repo CI is:
+  #   SOLANA_ZIG=/path/to/fork/zig bash tools/ci-fork-sbf.sh
+  # We keep this job as an explicit reminder until prebuilt fork Zig
+  # binaries are published for GitHub-hosted runners.
   # -------------------------------------------------------------------
   ci-fork-sbf-smoke:
-    name: ci-fork-sbf-smoke (build-only)
+    name: ci-fork-sbf-smoke (placeholder)
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     continue-on-error: true

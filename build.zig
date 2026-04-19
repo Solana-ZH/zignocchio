@@ -18,9 +18,16 @@ pub fn build(b: *std.Build) !void {
         "example",
         "Example to build (hello / hello-lazy / counter / counter-lazy / vault / vault-lazy / transfer-sol / transfer-sol-lazy / transfer-owned / transfer-owned-lazy / pda-storage / pda-storage-lazy / token-vault / token-vault-lazy / escrow / escrow-lazy / noop / noop-lazy / logonly / logonly-lazy)",
     ) orelse "counter";
+    const skip_program_build = b.option(
+        bool,
+        "skip-program-build",
+        "Skip direct-SBF artifact build and only configure host-side test steps.",
+    ) orelse false;
 
-    const example_path = b.fmt("examples/{s}/lib.zig", .{example_name});
-    try buildForkSbf(b, example_name, example_path, optimize);
+    if (!skip_program_build) {
+        const example_path = b.fmt("examples/{s}/lib.zig", .{example_name});
+        try buildForkSbf(b, example_name, example_path, optimize);
+    }
 
     // SDK unit tests — always host target.
     const test_step = b.step("test", "Run unit tests");
