@@ -70,8 +70,9 @@ fn initStorage(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
     @memcpy(data[0..32], user.key()[0..32]);
     @as(*align(1) u64, @ptrCast(data.ptr + 32)).* = initial_value;
 
-    sdk.logMsg("PDA Storage: initialized with value");
-    sdk.logU64(initial_value);
+    var init_logger = sdk.Logger(64).init();
+    _ = init_logger.append("PDA Storage: initialized value=").append(initial_value);
+    init_logger.log();
     return {};
 }
 
@@ -111,7 +112,8 @@ fn updateStorage(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
     }
     @as(*align(1) u64, @ptrCast(data.ptr + 32)).* = new_value;
 
-    sdk.logMsg("PDA Storage: updated to value");
-    sdk.logU64(new_value);
+    var update_logger = sdk.Logger(64).init();
+    _ = update_logger.append("PDA Storage: updated value=").append(new_value);
+    update_logger.log();
     return {};
 }

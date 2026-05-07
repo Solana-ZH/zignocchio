@@ -64,10 +64,12 @@ pub const syscalls = @import("syscalls.zig");
 pub const log = @import("log.zig");
 pub const entrypoint = @import("entrypoint.zig");
 pub const allocator = @import("allocator.zig");
+pub const runtime = @import("runtime.zig");
 pub const pda = @import("pda.zig");
 pub const cpi = @import("cpi.zig");
 pub const lazy = @import("lazy.zig");
 pub const token = @import("token/mod.zig");
+pub const sysvars = @import("sysvars/mod.zig");
 pub const guard = @import("guard.zig");
 pub const schema = @import("schema.zig");
 pub const system = @import("system.zig");
@@ -104,9 +106,12 @@ pub const log64 = log.log64;
 pub const logPubkey = log.logPubkey;
 pub const logComputeUnits = log.logComputeUnits;
 pub const getRemainingComputeUnits = log.getRemainingComputeUnits;
+pub const Logger = log.Logger;
+pub const LogArgument = log.Argument;
 
-// Re-export allocator
+// Re-export allocator / runtime helpers
 pub const BumpAllocator = allocator.BumpAllocator;
+pub const NoAllocator = runtime.NoAllocator;
 
 // Re-export PDA functions
 pub const findProgramAddress = pda.findProgramAddress;

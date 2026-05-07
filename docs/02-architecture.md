@@ -67,7 +67,9 @@ sdk/zignocchio.zig (统一入口)
 │   ├── log.zig          ── 日志封装
 │   ├── pda.zig          ── PDA 推导（findProgramAddress, createProgramAddress）
 │   ├── cpi.zig          ── 跨程序调用（invoke, invokeSigned, return data）
-│   └── allocator.zig    ── BumpAllocator（32KB heap）
+│   ├── allocator.zig    ── BumpAllocator（32KB heap）
+│   ├── runtime.zig      ── allocator / panic 组合层（含 NoAllocator）
+│   └── sysvars/         ── clock / rent / instructions / fees
 │
 ├── guard/          (新建)
 │   └── guard.zig        ── 6 个安全检查 helper
@@ -113,6 +115,8 @@ sdk/zignocchio.zig (统一入口)
 | `pda` | PDA 推导与验证 | 已完成 | 输出参数模式（非返回值） |
 | `cpi` | 跨程序调用、return data | 已完成 | C-ABI 结构体字段顺序必须精确 |
 | `allocator` | Bump allocator（向下增长） | 已完成 | 不支持 free / resize |
+| `runtime` | allocator / panic 组合层，提供 `NoAllocator` 与 panic helpers | 已完成 | 目前仍是函数式组合点，不是宏式声明系统 |
+| `sysvars` | `clock` / `rent` / `instructions` / `fees` 正式模块 | 已完成 | host target 下 `get()` 返回 `UnsupportedSysvar` |
 | `guard` | 运行期安全检查 helper | 新建 | 每个断言失败时返回明确的 `ProgramError` |
 | `schema` | comptime 账户布局接口 | 新建 | 用 Zig `comptime` 计算布局，零运行时开销 |
 | `system` | System Program CPI 高级封装 | 新建 | 指令数据格式必须与 Solana 一致 |

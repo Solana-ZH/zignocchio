@@ -109,9 +109,9 @@ pub fn process(
     sdk.logMsg("Deposit: Starting");
     const validated = try validateAccounts(accounts, program_id);
     const data = try parseData(instruction_data);
-    sdk.logMsg("Deposit: Validated accounts and data");
-    sdk.logMsg("Deposit amount:");
-    sdk.logU64(data.amount);
+    var deposit_logger = sdk.Logger(48).init();
+    _ = deposit_logger.append("Deposit amount=").append(data.amount);
+    deposit_logger.log();
 
     const transfer_ix_data = createTransferInstruction(data.amount);
     const account_metas = [_]sdk.AccountMeta{

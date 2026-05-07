@@ -107,9 +107,9 @@ pub fn process(
     defer ref.release();
     const state = Schema.from_bytes_unchecked(ref.value);
 
-    sdk.logMsg("Accept: Validated accounts");
-    sdk.logMsg("Accept amount:");
-    sdk.logU64(state.amount);
+    var accept_logger = sdk.Logger(48).init();
+    _ = accept_logger.append("Accept amount=").append(state.amount);
+    accept_logger.log();
 
     if (state.amount == 0) {
         sdk.logMsg("Error: Escrow is empty");

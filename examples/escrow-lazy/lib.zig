@@ -120,12 +120,13 @@ fn processMake(
         return error.InvalidInstructionData;
     }
 
-    sdk.logMsg("Make: Validated accounts and data");
-    sdk.logMsg("Make amount:");
-    sdk.logU64(amount);
+    var make_logger = sdk.Logger(48).init();
+    _ = make_logger.append("Make amount=").append(amount);
+    make_logger.log();
 
     const space: u64 = @sizeOf(EscrowState);
-    const rent_exempt = ((space / 256) + 1) * 6960;
+    const rent = try sdk.sysvars.rent.Rent.get();
+    const rent_exempt = try rent.tryMinimumBalance(space);
     const lamports = amount + rent_exempt;
     const signers_seeds = &[_][]const u8{ "escrow", &maker_key, &[_]u8{bump} };
     try sdk.system.createAccountSignedLazy(
@@ -224,9 +225,9 @@ fn processRefund(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
         return error.IncorrectProgramId;
     }
     try verifyEscrowPda(escrow.key(), &state.maker, state.bump, program_id);
-    sdk.logMsg("Refund: Validated accounts");
-    sdk.logMsg("Refund amount:");
-    sdk.logU64(state.amount);
+    var refund_logger = sdk.Logger(48).init();
+    _ = refund_logger.append("Refund amount=").append(state.amount);
+    refund_logger.log();
     if (state.amount == 0) {
         sdk.logMsg("Error: Escrow is empty");
         return error.InsufficientFunds;

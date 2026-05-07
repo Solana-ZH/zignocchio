@@ -54,12 +54,12 @@ Zignocchio has corresponding functionality, but not yet the same shape or maturi
 
 ### What is still clearly missing
 
-These are the most obvious gaps versus Pinocchio as a complete SDK:
+These are the most obvious remaining gaps versus Pinocchio as a complete SDK:
 
-- **Formal `sysvars` module family** (`rent`, `clock`, `instructions`, `fees`)
-- **`no_allocator`-style mode**
-- **Formal panic-handler strategy / composition layer**
+- **A more polished declarative runtime-composition story**
 - **A clearer split between thin core and higher-level helper layers**
+- **A more settled default fast-path style for everyday programs**
+- **More ecosystem-style layering around the current core modules**
 
 ---
 
@@ -161,14 +161,14 @@ Zignocchio already covers much of the same functional surface, but not yet with 
 
 | Area | Pinocchio | Zignocchio | Status | Notes |
 |---|---|---|---|---|
-| Clock sysvar | `sysvars::clock` | no formal `sdk.sysvars.clock` | Missing | Underlying syscall support exists, but not a public module layer. |
-| Rent sysvar | `sysvars::rent` | no formal `sdk.sysvars.rent` | Missing | This is especially important because many current examples still use conservative rent approximations. |
-| Fees sysvar | `sysvars::fees` | no formal module | Missing | Formal API missing. |
-| Instructions sysvar | `sysvars::instructions` | no formal module | Missing | Important for more advanced program patterns. |
+| Clock sysvar | `sysvars::clock` | `sdk.sysvars.clock` | Aligned | Formal module now exists. |
+| Rent sysvar | `sysvars::rent` | `sdk.sysvars.rent` | Aligned | Formal module now exists; examples can now move off conservative approximations over time. |
+| Fees sysvar | `sysvars::fees` | `sdk.sysvars.fees` | Partial | Formal API now exists, but runtime availability may still vary by environment. |
+| Instructions sysvar | `sysvars::instructions` | `sdk.sysvars.instructions` | Aligned | Formal module now exists. |
 
 ### Assessment
 
-This is one of the clearest and most concrete gaps.
+This gap is now substantially closed. The remaining work is mostly adoption, testing breadth, and documenting runtime caveats such as fees availability.
 
 ---
 
@@ -176,9 +176,9 @@ This is one of the clearest and most concrete gaps.
 
 | Area | Pinocchio | Zignocchio | Status | Notes |
 |---|---|---|---|---|
-| Basic log syscall wrappers | core + companion logging story | `sdk/log.zig` | Partial | Zignocchio has thin syscall wrappers, but not the same richer logger ergonomics. |
-| Buffered logger / append-style formatting | `pinocchio-log` | none | Missing | No `Logger<N>`-style helper layer yet. |
-| Benchmark-friendly minimal logging discipline | manual pattern | manual pattern | Partial | Demonstrated in benchmarks, but not yet formalized as a logging strategy layer. |
+| Basic log syscall wrappers | core + companion logging story | `sdk/log.zig` | Aligned | Thin syscall wrappers remain available. |
+| Buffered logger / append-style formatting | `pinocchio-log` | `sdk.Logger(N)` / `sdk.LogArgument` | Partial | Zignocchio now has a fixed-buffer append-style logger, though the formatting surface is still smaller than Pinocchio's. |
+| Benchmark-friendly minimal logging discipline | manual pattern | documented `sdk.Logger(N)` + log stripping guidance | Partial | Now more formalized, but still not a fully separate logging package/ecosystem. |
 
 ---
 
@@ -186,15 +186,15 @@ This is one of the clearest and most concrete gaps.
 
 | Area | Pinocchio | Zignocchio | Status | Notes |
 |---|---|---|---|---|
-| Default bump allocator setup | `default_allocator!` | `sdk/allocator.zig` | Partial | Bump allocator exists, but not as part of a polished entrypoint composition story. |
-| No-allocation mode | `no_allocator!` | none | Missing | Important if we want strong parity with Pinocchio's explicit no-allocation stance. |
-| Default panic handler setup | `default_panic_handler!` | none | Missing | No first-class equivalent layer. |
-| `no_std`-style panic handler option | `nostd_panic_handler!` | none | Missing | No equivalent story yet. |
-| Declarative entrypoint + allocator + panic composition | macro family | manual assembly | Missing | This is a major ergonomics / architecture gap, even if performance primitives already exist. |
+| Default bump allocator setup | `default_allocator!` | `sdk/allocator.zig` + `sdk.runtime` | Partial | Bump allocator exists and is now part of an explicit runtime-composition story, but not yet a single declarative macro layer. |
+| No-allocation mode | `no_allocator!` | `sdk.runtime.NoAllocator` / `sdk.NoAllocator` | Partial | Capability now exists, including manual heap carve-out helpers. |
+| Default panic handler setup | `default_panic_handler!` | `sdk.runtime.defaultPanic(...)` | Partial | First-class helper now exists, but Zig uses function composition rather than Rust-style macro wiring. |
+| `no_std`-style panic handler option | `nostd_panic_handler!` | `sdk.runtime.noStdPanic(...)` | Partial | Equivalent composition point now exists, though current implementation is intentionally simple. |
+| Declarative entrypoint + allocator + panic composition | macro family | documented manual assembly | Partial | Recipes now exist, but the ergonomics still differ from Pinocchio's macro family. |
 
 ### Assessment
 
-This is one of the biggest architectural gaps if the goal is a true Pinocchio-equivalent SDK.
+This gap is no longer "missing primitives" so much as "missing final polish". Zignocchio now has the core allocator / panic composition pieces, but its ergonomics are still more manual than Pinocchio's.
 
 ---
 
@@ -248,11 +248,11 @@ It is **not** yet accurate to say:
 
 > "Zignocchio is now a complete Zig implementation of Pinocchio."
 
-That would overstate parity, because Zignocchio still lacks:
+That would still overstate parity, because Zignocchio still lacks:
 
-- a formal sysvars layer
-- a `no_allocator`/panic-handler composition story
+- a more declarative runtime-composition layer
 - a clearly companion-style ecosystem boundary
+- richer logging ergonomics
 - a fully settled "default fast path" ergonomic model
 
 ---
@@ -261,34 +261,31 @@ That would overstate parity, because Zignocchio still lacks:
 
 ## P0 — highest priority gaps
 
-### 1. Add formal `sdk.sysvars` modules
+### 1. Finish adoption of the new `sdk.sysvars` family
 
-Recommended first additions:
+Recommended next work:
 
-- `sdk/sysvars/rent.zig`
-- `sdk/sysvars/clock.zig`
-- `sdk/sysvars/instructions.zig`
-- `sdk/sysvars/fees.zig`
+- migrate remaining example/template rent logic onto `sdk.sysvars.rent`
+- expand runtime coverage where `fees` availability differs by environment
+- add more example-level usage where sysvars improve clarity
 
 Why this matters:
 
-- It is the cleanest feature gap versus Pinocchio.
-- It reduces the need for conservative rent approximations.
-- It makes advanced runtime-aware patterns much easier to express.
+- The module family now exists, so the next value comes from adoption.
+- It reduces the chance that old approximations remain the unofficial default style.
 
-### 2. Add explicit allocator / panic composition modes
+### 2. Polish allocator / panic composition into a stronger default story
 
 Recommended additions:
 
-- `no_allocator`-style mode
-- default panic strategy for hosted / `std`-linked contexts
-- explicit direct-SBF / `no_std` panic strategy
-- clearer entrypoint composition recipes
+- clearer README/template guidance
+- decide whether a more declarative helper layer is worth adding
+- decide how much host-vs-direct-SBF panic behavior should diverge over time
 
 Why this matters:
 
-- This is a major part of Pinocchio's SDK shape.
-- It clarifies what the minimal runtime contract of Zignocchio actually is.
+- The primitives now exist.
+- The remaining gap is mostly ergonomics and recommendation clarity.
 
 ### 3. Decide whether Zignocchio wants a thinner core
 

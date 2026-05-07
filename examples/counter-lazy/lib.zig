@@ -38,8 +38,9 @@ fn processInstruction(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
     const counter_ptr = @as(*u64, @ptrCast(@alignCast(data.ptr)));
     const current = counter_ptr.*;
 
-    sdk.logMsg("Current counter value:");
-    sdk.logU64(current);
+    var current_logger = sdk.Logger(48).init();
+    _ = current_logger.append("Current counter value=").append(current);
+    current_logger.log();
 
     if (instruction_data.len > 0) {
         const operation = instruction_data[0];
@@ -78,7 +79,8 @@ fn processInstruction(context: *sdk.lazy.EntryContext) sdk.ProgramResult {
         sdk.logMsg("Incremented counter (default)");
     }
 
-    sdk.logMsg("New counter value:");
-    sdk.logU64(counter_ptr.*);
+    var new_logger = sdk.Logger(48).init();
+    _ = new_logger.append("New counter value=").append(counter_ptr.*);
+    new_logger.log();
     return {};
 }

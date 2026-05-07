@@ -101,13 +101,13 @@ pub fn process(
     const validated = try validateAccounts(accounts, program_id);
     const data = try parseData(instruction_data);
 
-    sdk.logMsg("Make: Validated accounts and data");
-    sdk.logMsg("Make amount:");
-    sdk.logU64(data.amount);
+    var make_logger = sdk.Logger(48).init();
+    _ = make_logger.append("Make amount=").append(data.amount);
+    make_logger.log();
 
     const space: u64 = @sizeOf(EscrowState);
-    // Rent exempt minimum for the escrow account data
-    const rent_exempt = ((space / 256) + 1) * 6960;
+    const rent = try sdk.sysvars.rent.Rent.get();
+    const rent_exempt = try rent.tryMinimumBalance(space);
     const lamports = data.amount + rent_exempt;
 
     // Create escrow account via CPI with PDA signing

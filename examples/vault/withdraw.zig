@@ -70,9 +70,9 @@ pub fn process(
 
     const amount = validated.vault.lamports();
 
-    sdk.logMsg("Withdraw: Validated accounts");
-    sdk.logMsg("Withdraw amount:");
-    sdk.logU64(amount);
+    var withdraw_logger = sdk.Logger(48).init();
+    _ = withdraw_logger.append("Withdraw amount=").append(amount);
+    withdraw_logger.log();
 
     if (amount == 0) {
         sdk.logMsg("Error: Vault is empty");

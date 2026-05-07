@@ -113,9 +113,9 @@ pub fn process(
     // Parse instruction data
     const data = try parseData(instruction_data);
 
-    sdk.logMsg("Deposit: Validated accounts and data");
-    sdk.logMsg("Deposit amount:");
-    sdk.logU64(data.amount);
+    var deposit_logger = sdk.Logger(48).init();
+    _ = deposit_logger.append("Deposit amount=").append(data.amount);
+    deposit_logger.log();
 
     // Execute transfer using the high-level wrapper
     try sdk.token.transfer.transfer(

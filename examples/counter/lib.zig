@@ -55,8 +55,9 @@ fn processInstruction(
     const counter_ptr = @as(*u64, @ptrCast(@alignCast(data.value.ptr)));
     const current = counter_ptr.*;
 
-    sdk.logMsg("Current counter value:");
-    sdk.logU64(current);
+    var current_logger = sdk.Logger(48).init();
+    _ = current_logger.append("Current counter value=").append(current);
+    current_logger.log();
 
     // Determine operation from instruction data
     if (instruction_data.len > 0) {
@@ -102,8 +103,9 @@ fn processInstruction(
     }
 
     // Log new value
-    sdk.logMsg("New counter value:");
-    sdk.logU64(counter_ptr.*);
+    var new_logger = sdk.Logger(48).init();
+    _ = new_logger.append("New counter value=").append(counter_ptr.*);
+    new_logger.log();
 
     // Log remaining compute units
     // NOTE: Commented out to avoid needing to patch sbpf with sol_remaining_compute_units syscall

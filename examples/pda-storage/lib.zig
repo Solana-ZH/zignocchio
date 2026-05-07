@@ -103,9 +103,8 @@ fn initStorage(
 
     // Create account via System Program CPI
     const space: u64 = 40; // 32 bytes owner pubkey + 8 bytes value
-    // Rent-exempt minimum for ~40 bytes on Solana test validators is ~1,169,280 lamports.
-    // Using a conservative fixed value to keep the example self-contained.
-    const rent_exempt: u64 = 1_200_000;
+    const rent = try sdk.sysvars.rent.Rent.get();
+    const rent_exempt = try rent.tryMinimumBalance(space);
 
     const signer_seeds = &[_][]const u8{
         STORAGE_SEED,
@@ -134,8 +133,9 @@ fn initStorage(
     @memcpy(data.value[0..32], user.key()[0..32]);
     std.mem.writeInt(u64, data.value[32..40], initial_value, .little);
 
-    sdk.logMsg("PDA Storage: initialized with value");
-    sdk.logU64(initial_value);
+    var init_logger = sdk.Logger(64).init();
+    _ = init_logger.append("PDA Storage: initialized value=").append(initial_value);
+    init_logger.log();
 
     return {};
 }
@@ -195,8 +195,9 @@ fn updateStorage(
     // Update value
     std.mem.writeInt(u64, data.value[32..40], new_value, .little);
 
-    sdk.logMsg("PDA Storage: updated to value");
-    sdk.logU64(new_value);
+    var update_logger = sdk.Logger(64).init();
+    _ = update_logger.append("PDA Storage: updated value=").append(new_value);
+    update_logger.log();
 
     return {};
 }

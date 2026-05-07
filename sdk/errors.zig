@@ -38,6 +38,8 @@ pub const ProgramError = error{
     ImmutableAccount,
     /// Incorrect authority
     IncorrectAuthority,
+    /// Unsupported sysvar
+    UnsupportedSysvar,
 };
 
 /// Success return value
@@ -64,6 +66,7 @@ pub fn errorToU64(err: ProgramError) u64 {
         ProgramError.ArithmeticOverflow => 16,
         ProgramError.ImmutableAccount => 17,
         ProgramError.IncorrectAuthority => 18,
+        ProgramError.UnsupportedSysvar => 19,
     };
 }
 
@@ -87,4 +90,5 @@ pub const ProgramResult = error{
     ArithmeticOverflow,
     ImmutableAccount,
     IncorrectAuthority,
+    UnsupportedSysvar,
 }!void;

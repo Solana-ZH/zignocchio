@@ -111,9 +111,13 @@ pub fn process(
     // Use a reasonable amount for rent exemption (approximately 0.002 SOL for 165 bytes)
     const lamports: u64 = 2_039_280;
 
-    sdk.logMsg("Initialize: Creating account via CPI");
-    sdk.logU64(lamports);
-    sdk.logU64(token_account_size);
+    var init_logger = sdk.Logger(96).init();
+    _ = init_logger
+        .append("Initialize: create account lamports=")
+        .append(lamports)
+        .append(" size=")
+        .append(token_account_size);
+    init_logger.log();
 
     // Build CreateAccount instruction
     const seed_owner = validated.owner.key().*;

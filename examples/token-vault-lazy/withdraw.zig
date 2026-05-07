@@ -92,8 +92,9 @@ pub fn process(
     const vault_account = try sdk.token.TokenAccount.fromAccountInfo(validated.vault_token_account);
     const amount = vault_account.amount();
 
-    sdk.logMsg("Withdraw amount:");
-    sdk.logU64(amount);
+    var withdraw_logger = sdk.Logger(48).init();
+    _ = withdraw_logger.append("Withdraw amount=").append(amount);
+    withdraw_logger.log();
 
     // Validate vault has tokens to withdraw
     if (amount == 0) {

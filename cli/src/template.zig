@@ -108,6 +108,12 @@ pub const lib_zig =
     \\
     \\const sdk = @import("sdk");
     \\
+    \\// Optional: uncomment to take explicit ownership of panic reporting in
+    \\// direct-SBF programs.
+    \\// pub fn panic(msg: []const u8, trace: ?*@import("std").builtin.StackTrace, ret_addr: ?usize) noreturn {
+    \\//     sdk.runtime.noStdPanic(msg, trace, ret_addr);
+    \\// }
+    \\
     \\pub const CounterState = extern struct {
     \\    pub const DISCRIMINATOR: u8 = 0xC0;
     \\    discriminator: u8,
@@ -158,8 +164,8 @@ pub const lib_zig =
     \\    const validated = try validateInitialize(accounts, program_id);
     \\
     \\    const space: u64 = @sizeOf(CounterState);
-    \\    const rent_exempt = ((space / 256) + 1) * 6960;
-    \\    const lamports = rent_exempt;
+    \\    const rent = try sdk.sysvars.rent.Rent.get();
+    \\    const lamports = try rent.tryMinimumBalance(space);
     \\
     \\    const owner_key = validated.owner.key().*;
     \\    const seeds = &[_][]const u8{ "counter", &owner_key };

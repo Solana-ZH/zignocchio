@@ -65,9 +65,9 @@ pub fn process(
     defer ref.release();
     const state = Schema.from_bytes_unchecked(ref.value);
 
-    sdk.logMsg("Refund: Validated accounts");
-    sdk.logMsg("Refund amount:");
-    sdk.logU64(state.amount);
+    var refund_logger = sdk.Logger(48).init();
+    _ = refund_logger.append("Refund amount=").append(state.amount);
+    refund_logger.log();
 
     if (state.amount == 0) {
         sdk.logMsg("Error: Escrow is empty");

@@ -10,7 +10,7 @@ Build Solana programs in Zig with the `solana-zig` fork and a direct sBPF pipeli
 - **Default SBF CPU:** `baseline`
 
 This repository no longer uses `elf2sbpf` or `sbpf-linker` as active build backends.
-Historical comparison data is kept in [`docs/backend-comparison.md`](docs/backend-comparison.md), the current direct-SBF CU snapshot is summarized in [`docs/cu-summary.md`](docs/cu-summary.md), and a Pinocchio parity / gap analysis is tracked in [`docs/pinocchio-gap-analysis.md`](docs/pinocchio-gap-analysis.md).
+Historical comparison data is kept in [`docs/backend-comparison.md`](docs/backend-comparison.md), the current direct-SBF CU snapshot is summarized in [`docs/cu-summary.md`](docs/cu-summary.md), a Pinocchio parity / gap analysis is tracked in [`docs/pinocchio-gap-analysis.md`](docs/pinocchio-gap-analysis.md), and the current allocator / panic / entrypoint recipes live in [`docs/runtime-composition.md`](docs/runtime-composition.md).
 
 ## Prerequisites
 
@@ -124,13 +124,77 @@ This repo includes **Zignocchio**, a Zig SDK for Solana programs with:
 - CPI helpers
 - guard helpers
 - schema helpers
+- lazy entrypoint helpers
+- formal sysvar helpers (`clock`, `rent`, `instructions`, `fees`)
+- runtime composition helpers (`sdk.runtime`, `sdk.NoAllocator`)
+- fixed-buffer logging ergonomics (`sdk.Logger`, `sdk.LogArgument`)
 - SPL Token helpers
 
 See:
 
 - [`sdk/zignocchio.zig`](sdk/zignocchio.zig)
+- [`docs/runtime-composition.md`](docs/runtime-composition.md)
 - [`AGENTS.md`](AGENTS.md)
 - [`examples/`](examples/)
+
+## Runtime composition modes
+
+Zignocchio now exposes explicit runtime composition points instead of treating allocator / panic behavior as implicit glue.
+
+### 1. Standard zero-copy entrypoint
+
+```zig
+const sdk = @import("sdk");
+
+export fn entrypoint(input: [*]u8) u64 {
+    return @call(.always_inline, sdk.createEntrypoint(processInstruction), .{input});
+}
+```
+
+### 2. Lazy / cursor-based entrypoint
+
+```zig
+const sdk = @import("sdk");
+
+export fn entrypoint(input: [*]u8) u64 {
+    return @call(.always_inline, sdk.createLazyEntrypoint(processInstruction), .{input});
+}
+```
+
+### 3. No-allocation path with explicit panic forwarding
+
+```zig
+const std = @import("std");
+const sdk = @import("sdk");
+
+pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
+    sdk.runtime.noStdPanic(msg, trace, ret_addr);
+}
+
+fn useScratch() void {
+    const scratch = sdk.NoAllocator.allocateUnchecked([64]u8, 0);
+    scratch.* = [_]u8{0} ** 64;
+}
+```
+
+### 4. Formal sysvars
+
+```zig
+const rent = try sdk.sysvars.rent.Rent.get();
+const minimum_balance = try rent.tryMinimumBalance(space);
+const clock = try sdk.sysvars.clock.Clock.get();
+_ = clock;
+```
+
+### 5. Fixed-buffer logger
+
+```zig
+var logger = sdk.Logger(64).init();
+_ = logger.append("amount=").appendWithArgs(amount, &.{.{ .Precision = 9 }});
+logger.log();
+```
+
+For the fuller standard / lazy / no-allocation recipes, see [`docs/runtime-composition.md`](docs/runtime-composition.md).
 
 ## Historical backend/CU summary
 
